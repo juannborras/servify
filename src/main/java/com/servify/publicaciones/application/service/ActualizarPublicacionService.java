@@ -90,6 +90,9 @@ public class ActualizarPublicacionService implements ActualizarPublicacionUseCas
         if (command.getUbicacion() != null) {
             publicacionServicio.actualizarUbicacion(command.getUbicacion());
         }
+        if (command.getZonasCobertura() != null && !command.getZonasCobertura().isEmpty()) {
+            publicacionServicio.actualizarZonasCobertura(command.getZonasCobertura());
+        }
         if (command.getDisponibilidadesHorarias() != null && !command.getDisponibilidadesHorarias().isEmpty()) {
             publicacionServicio.actualizarDisponibilidades(command.getDisponibilidadesHorarias());
         }
@@ -127,6 +130,7 @@ public class ActualizarPublicacionService implements ActualizarPublicacionUseCas
                 .descripcion(publicacionServicio.getDescripcion())
                 .modalidadServicio(publicacionServicio.getModalidadServicio())
                 .ubicacion(publicacionServicio.getUbicacion())
+                .zonasCobertura(publicacionServicio.getZonasCobertura())
                 .disponibilidadesHorarias(publicacionServicio.getDisponibilidadesHorarias())
                 .precioBase(publicacionServicio.getPrecioBase())
                 .estado(publicacionServicio.getEstado())

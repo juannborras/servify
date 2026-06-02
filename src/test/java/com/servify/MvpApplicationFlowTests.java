@@ -785,16 +785,27 @@ class MvpApplicationFlowTests {
         }
 
         @Override
+        public Optional<Calificacion> buscarPorAsignacionServicioIdYRolCalificador(
+                UUID asignacionServicioId,
+                com.servify.solicitudes.domain.enumtype.RolConfirmante rolCalificador
+        ) {
+            return calificaciones.values().stream()
+                    .filter(calificacion -> Objects.equals(calificacion.getAsignacionServicioId(), asignacionServicioId))
+                    .filter(calificacion -> Objects.equals(calificacion.getRolCalificador(), rolCalificador))
+                    .findFirst();
+        }
+
+        @Override
         public List<Calificacion> buscarPorPrestadorId(UUID prestadorId) {
             return calificaciones.values().stream()
-                    .filter(calificacion -> Objects.equals(calificacion.getPrestadorId(), prestadorId))
+                    .filter(calificacion -> Objects.equals(calificacion.getCalificadoId(), prestadorId))
                     .toList();
         }
 
         @Override
         public List<Calificacion> buscarPorSolicitanteId(UUID solicitanteId) {
             return calificaciones.values().stream()
-                    .filter(calificacion -> Objects.equals(calificacion.getSolicitanteId(), solicitanteId))
+                    .filter(calificacion -> Objects.equals(calificacion.getCalificadorId(), solicitanteId))
                     .toList();
         }
     }
@@ -939,11 +950,6 @@ class MvpApplicationFlowTests {
                                                               Integer radioBusquedaKm) {
             Map<UUID, UUID> compatibles = new LinkedHashMap<>();
             for (PublicacionServicio publicacion : publicaciones.buscarActivasPorCategoria(categoriaServicioId)) {
-                if (precioMaximo != null
-                        && precioMaximo.compareTo(BigDecimal.ZERO) > 0
-                        && publicacion.getPrecioBase().compareTo(precioMaximo) > 0) {
-                    continue;
-                }
                 if (politica.esCompatible(
                         publicacion,
                         publicacion.getCategoriaServicio(),

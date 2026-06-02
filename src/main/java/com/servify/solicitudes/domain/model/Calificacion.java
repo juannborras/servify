@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import com.servify.shared.domain.model.BaseEntity;
+import com.servify.solicitudes.domain.enumtype.RolConfirmante;
 
 //La dejé minimalista porque en el MVP no hay reseña textual, solo estrellas.
 //Más adelante, si agregan comentarios o feedback escrito, se puede extender con algo como:
@@ -17,6 +18,9 @@ public class Calificacion extends BaseEntity {
     private UUID asignacionServicioId;
     private UUID solicitanteId;
     private UUID prestadorId;
+    private UUID calificadorId;
+    private UUID calificadoId;
+    private RolConfirmante rolCalificador;
     private Integer puntaje;
     private LocalDateTime fechaCalificacion;
 
@@ -30,11 +34,28 @@ public class Calificacion extends BaseEntity {
                         UUID prestadorId,
                         Integer puntaje,
                         LocalDateTime fechaCalificacion) {
+        this(id, solicitudId, asignacionServicioId, solicitanteId, prestadorId,
+                solicitanteId, prestadorId, RolConfirmante.SOLICITANTE, puntaje, fechaCalificacion);
+    }
+
+    public Calificacion(UUID id,
+                        UUID solicitudId,
+                        UUID asignacionServicioId,
+                        UUID solicitanteId,
+                        UUID prestadorId,
+                        UUID calificadorId,
+                        UUID calificadoId,
+                        RolConfirmante rolCalificador,
+                        Integer puntaje,
+                        LocalDateTime fechaCalificacion) {
         super(id);
         this.solicitudId = solicitudId;
         this.asignacionServicioId = asignacionServicioId;
         this.solicitanteId = solicitanteId;
         this.prestadorId = prestadorId;
+        this.calificadorId = calificadorId;
+        this.calificadoId = calificadoId;
+        this.rolCalificador = rolCalificador;
         this.puntaje = puntaje;
         this.fechaCalificacion = fechaCalificacion;
     }
@@ -53,6 +74,18 @@ public class Calificacion extends BaseEntity {
 
     public UUID getPrestadorId() {
         return prestadorId;
+    }
+
+    public UUID getCalificadorId() {
+        return calificadorId;
+    }
+
+    public UUID getCalificadoId() {
+        return calificadoId;
+    }
+
+    public RolConfirmante getRolCalificador() {
+        return rolCalificador;
     }
 
     public Integer getPuntaje() {
@@ -78,14 +111,14 @@ public class Calificacion extends BaseEntity {
         if (prestadorId == null) {
             return false;
         }
-        return this.prestadorId.equals(prestadorId);
+        return prestadorId.equals(this.calificadoId);
     }
 
-    public boolean fueEmitidaPor(UUID solicitanteId) {
-        if (solicitanteId == null) {
+    public boolean fueEmitidaPor(UUID usuarioId) {
+        if (usuarioId == null) {
             return false;
         }
-        return this.solicitanteId.equals(solicitanteId);
+        return usuarioId.equals(this.calificadorId);
     }
 
     public void actualizarPuntaje(Integer puntaje) {

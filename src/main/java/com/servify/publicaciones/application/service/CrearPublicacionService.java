@@ -95,6 +95,7 @@ public class CrearPublicacionService implements CrearPublicacionUseCase {
                 command.getDescripcion(),
                 command.getModalidadServicio(),
                 command.getUbicacion(),
+                command.getZonasCobertura(),
                 command.getDisponibilidadesHorarias(),
                 command.getPrecioBase(),
                 EstadoPublicacion.INACTIVA
@@ -120,6 +121,7 @@ public class CrearPublicacionService implements CrearPublicacionUseCase {
                 .descripcion(publicacionServicio.getDescripcion())
                 .modalidadServicio(publicacionServicio.getModalidadServicio())
                 .ubicacion(publicacionServicio.getUbicacion())
+                .zonasCobertura(publicacionServicio.getZonasCobertura())
                 .disponibilidadesHorarias(publicacionServicio.getDisponibilidadesHorarias())
                 .precioBase(publicacionServicio.getPrecioBase())
                 .estado(publicacionServicio.getEstado())

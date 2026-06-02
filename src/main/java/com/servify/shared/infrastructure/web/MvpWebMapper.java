@@ -49,6 +49,15 @@ public final class MvpWebMapper {
                 .toList();
     }
 
+    public static List<Ubicacion> toUbicaciones(List<UbicacionPayload> payloads) {
+        if (payloads == null) {
+            return Collections.emptyList();
+        }
+        return payloads.stream()
+                .map(MvpWebMapper::toUbicacion)
+                .toList();
+    }
+
     public static class UbicacionPayload {
         public String pais;
         public String provincia;

@@ -89,15 +89,18 @@ public class PublicacionJpaAdapter implements PublicacionServicioRepositoryPort,
     private final CategoriaServicioJpaRepository categoriaRepo;
     private final PublicacionServicioJpaRepository publicacionRepo;
     private final DisponibilidadHorariaJpaRepository disponibilidadRepo;
+    private final PublicacionZonaCoberturaJpaRepository zonaCoberturaRepo;
     private final CategoriaServicioJpaAdapter categoriaAdapter;
 
     public PublicacionJpaAdapter(CategoriaServicioJpaRepository categoriaRepo,
                                   PublicacionServicioJpaRepository publicacionRepo,
                                   DisponibilidadHorariaJpaRepository disponibilidadRepo,
+                                  PublicacionZonaCoberturaJpaRepository zonaCoberturaRepo,
                                   CategoriaServicioJpaAdapter categoriaAdapter) {
         this.categoriaRepo = categoriaRepo;
         this.publicacionRepo = publicacionRepo;
         this.disponibilidadRepo = disponibilidadRepo;
+        this.zonaCoberturaRepo = zonaCoberturaRepo;
         this.categoriaAdapter = categoriaAdapter;
     }
 
@@ -119,6 +122,15 @@ public class PublicacionJpaAdapter implements PublicacionServicioRepositoryPort,
                 disponibilidadRepo.save(de);
             });
         }
+        zonaCoberturaRepo.deleteByPublicacionId(saved.getId());
+        List<Ubicacion> zonas = publicacion.getZonasCobertura();
+        if (zonas == null || zonas.isEmpty()) {
+            zonas = publicacion.getUbicacion() == null ? List.of() : List.of(publicacion.getUbicacion());
+        }
+        zonas.forEach(zona -> {
+            PublicacionZonaCoberturaJpaEntity ze = toZonaEntity(saved.getId(), zona);
+            zonaCoberturaRepo.save(ze);
+        });
         return toPublicacionDomain(saved);
     }
 
@@ -188,7 +200,10 @@ public class PublicacionJpaAdapter implements PublicacionServicioRepositoryPort,
         if (p.getId() != null) {
             publicacionRepo.findAll().stream()
                     .filter(ex -> UsuarioJpaAdapter.uuidFromLong(ex.getId()).equals(p.getId()))
-                    .findFirst().ifPresent(ex -> e.setId(ex.getId()));
+                    .findFirst().ifPresent(ex -> {
+                        e.setId(ex.getId());
+                        e.setCreatedAt(ex.getCreatedAt());
+                    });
         }
         e.setUsuarioId(longFromUuid(p.getUsuarioId()));
         if (p.getCategoriaServicio() != null) e.setCategoriaId(longFromUuid(p.getCategoriaServicio().getId()));
@@ -218,15 +233,42 @@ public class PublicacionJpaAdapter implements PublicacionServicioRepositoryPort,
         Ubicacion ubicacion = new Ubicacion(
                 e.getPais(), e.getProvincia(), e.getCiudad(), e.getLocalidad(),
                 e.getCalle(), e.getAltura(), e.getReferencia(), e.getLatitud(), e.getLongitud());
+        List<Ubicacion> zonas = zonaCoberturaRepo.findByPublicacionId(e.getId()).stream()
+                .map(this::toUbicacion)
+                .toList();
+        if (zonas.isEmpty()) {
+            zonas = List.of(ubicacion);
+        }
         PublicacionServicio p = new PublicacionServicio(
                 UsuarioJpaAdapter.uuidFromLong(e.getId()),
                 UsuarioJpaAdapter.uuidFromLong(e.getUsuarioId()),
                 categoria, e.getTitulo(), e.getDescripcion(),
-                modalidadFromDb(e.getModalidad()), ubicacion, disponibilidades,
+                modalidadFromDb(e.getModalidad()), ubicacion, zonas, disponibilidades,
                 e.getPrecioBase(), EstadoPublicacion.valueOf(e.getEstado().toUpperCase()));
         if (e.getCreatedAt() != null) p.marcarCreacion(e.getCreatedAt());
         if (e.getUpdatedAt() != null) p.marcarModificacion(e.getUpdatedAt());
         return p;
+    }
+
+    private PublicacionZonaCoberturaJpaEntity toZonaEntity(Long publicacionId, Ubicacion zona) {
+        PublicacionZonaCoberturaJpaEntity e = new PublicacionZonaCoberturaJpaEntity();
+        e.setPublicacionId(publicacionId);
+        e.setPais(zona.getPais());
+        e.setProvincia(zona.getProvincia());
+        e.setCiudad(zona.getCiudad());
+        e.setLocalidad(zona.getLocalidad());
+        e.setCalle(zona.getCalle());
+        e.setAltura(zona.getAltura());
+        e.setReferencia(zona.getReferencia());
+        e.setLatitud(zona.getLatitud());
+        e.setLongitud(zona.getLongitud());
+        return e;
+    }
+
+    private Ubicacion toUbicacion(PublicacionZonaCoberturaJpaEntity e) {
+        return new Ubicacion(
+                e.getPais(), e.getProvincia(), e.getCiudad(), e.getLocalidad(),
+                e.getCalle(), e.getAltura(), e.getReferencia(), e.getLatitud(), e.getLongitud());
     }
 
     private String modalidadToDb(ModalidadServicio m) {

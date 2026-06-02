@@ -1,6 +1,7 @@
 package com.servify;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -156,6 +157,11 @@ class MvpHttpFlowTests {
                 """.formatted(prestadorId)))
                 .andExpect(status().isNoContent());
 
+        JsonNode estadoAceptado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
+        assertEquals("BUSCANDO_PRESTADOR", estadoAceptado.get("estadoSolicitud").asText());
+        assertEquals(1, estadoAceptado.get("distribucionesAceptadas").size());
+        assertEquals(distribucionId.toString(), estadoAceptado.get("distribucionesAceptadas").get(0).get("id").asText());
+
         JsonNode asignacion = responseJson(postPath("/api/v1/solicitudes/" + solicitudId + "/asignaciones/confirmaciones", """
                 {
                   "distribucionSolicitudId": "%s",
@@ -164,8 +170,68 @@ class MvpHttpFlowTests {
                 """.formatted(distribucionId, solicitanteId)));
 
         UUID asignacionId = UUID.fromString(asignacion.get("id").asText());
-        mockMvc.perform(get("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"))
-                .andExpect(status().isOk());
+        JsonNode estadoAsignado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
+        assertEquals("ASIGNADA", estadoAsignado.get("estadoSolicitud").asText());
+
+        mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
+                {
+                  "asignacionServicioId": "%s",
+                  "confirmanteId": "%s",
+                  "rolConfirmante": "SOLICITANTE",
+                  "observacion": "Finalizado por solicitante"
+                }
+                """.formatted(asignacionId, solicitanteId)))
+                .andExpect(status().isNoContent());
+
+        JsonNode estadoUnaConfirmacion = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
+        assertTrue(estadoUnaConfirmacion.get("confirmadoPorSolicitante").asBoolean());
+        assertTrue(!estadoUnaConfirmacion.get("confirmadoPorPrestador").asBoolean());
+
+        mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
+                {
+                  "asignacionServicioId": "%s",
+                  "confirmanteId": "%s",
+                  "rolConfirmante": "PRESTADOR",
+                  "observacion": "Finalizado por prestador"
+                }
+                """.formatted(asignacionId, prestadorId)))
+                .andExpect(status().isNoContent());
+
+        JsonNode estadoFinalizado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
+        assertTrue(estadoFinalizado.get("finalizacionConfirmada").asBoolean());
+        assertEquals("FINALIZADA", estadoFinalizado.get("estadoSolicitud").asText());
+
+        mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/calificaciones", """
+                {
+                  "asignacionServicioId": "%s",
+                  "solicitanteId": "%s",
+                  "prestadorId": "%s",
+                  "calificadorId": "%s",
+                  "rolCalificador": "SOLICITANTE",
+                  "puntaje": 5
+                }
+                """.formatted(asignacionId, solicitanteId, prestadorId, solicitanteId)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/calificaciones", """
+                {
+                  "asignacionServicioId": "%s",
+                  "solicitanteId": "%s",
+                  "prestadorId": "%s",
+                  "calificadorId": "%s",
+                  "rolCalificador": "PRESTADOR",
+                  "puntaje": 4
+                }
+                """.formatted(asignacionId, solicitanteId, prestadorId, prestadorId)))
+                .andExpect(status().isCreated());
+
+        JsonNode reputacionPrestador = responseJson(getPath("/api/v1/usuarios/" + prestadorId + "/reputacion"));
+        assertEquals(1, reputacionPrestador.get("cantidadValoraciones").asInt());
+        assertEquals(5.0, reputacionPrestador.get("promedioEstrellas").asDouble());
+
+        JsonNode reputacionSolicitante = responseJson(getPath("/api/v1/usuarios/" + solicitanteId + "/reputacion"));
+        assertEquals(1, reputacionSolicitante.get("cantidadValoraciones").asInt());
+        assertEquals(4.0, reputacionSolicitante.get("promedioEstrellas").asDouble());
 
         assertNotNull(asignacionId);
     }
@@ -354,6 +420,184 @@ class MvpHttpFlowTests {
         assertNotNull(solicitudId);
         assertEquals(1, recibidas.size());
         assertEquals(publicacionId.toString(), recibidas.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
+    void precioReferenciaMenorNoBloqueaMatchingPorquePrestadorPuedeContraofertar() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-precio-menor-http@servify.test");
+        UUID prestadorId = crearUsuario("guitarra-precio-menor-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Clases particulares precio menor HTTP");
+
+        UUID publicacionId = crearPublicacionActiva(prestadorId, categoriaId, "Clases de guitarra precio menor HTTP", "Palermo", 15000);
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "MONDAY",
+                    "horaDesde": "10:00:00",
+                    "horaHasta": "11:00:00"
+                  },
+                  "descripcionNecesidad": "Busco una clase inicial de guitarra con presupuesto flexible",
+                  "precioReferencia": 10000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidas = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+
+        assertNotNull(solicitudId);
+        assertEquals(1, recibidas.size());
+        assertEquals(publicacionId.toString(), recibidas.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
+    void solicitantePuedeEditarYCancelarSolicitudActiva() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-edita-solicitud-http@servify.test");
+        UUID categoriaId = crearCategoriaActiva("Solicitudes editables HTTP");
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "MONDAY",
+                    "horaDesde": "10:00:00",
+                    "horaHasta": "11:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito una clase inicial",
+                  "precioReferencia": 10000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode actualizada = responseJson(putPath("/api/v1/solicitudes/" + solicitudId, """
+                {
+                  "solicitanteId": "%s",
+                  "modalidadServicio": "VIRTUAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Belgrano",
+                    "calle": "Cabildo",
+                    "altura": "1900",
+                    "referencia": "Online",
+                    "latitud": -34.5621,
+                    "longitud": -58.4567
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "TUESDAY",
+                    "horaDesde": "14:00:00",
+                    "horaHasta": "15:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito una clase inicial editada",
+                  "precioReferencia": 12000
+                }
+                """.formatted(solicitanteId)));
+
+        assertEquals("VIRTUAL", actualizada.get("modalidadServicio").asText());
+        assertEquals("Belgrano", actualizada.get("ubicacion").get("localidad").asText());
+        assertEquals("TUESDAY", actualizada.get("disponibilidadRequerida").get("diaSemana").asText());
+        assertEquals("Necesito una clase inicial editada", actualizada.get("descripcionNecesidad").asText());
+
+        mockMvc.perform(deleteJson("/api/v1/solicitudes/" + solicitudId, """
+                {
+                  "solicitanteId": "%s"
+                }
+                """.formatted(solicitanteId)))
+                .andExpect(status().isNoContent());
+
+        JsonNode cancelada = responseJson(getPath("/api/v1/solicitudes/" + solicitudId));
+        assertEquals("CANCELADA", cancelada.get("estado").asText());
+    }
+
+    @Test
+    void contraofertaPendienteSeExponeYPuedeResolversePorHttp() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-contraoferta-http@servify.test");
+        UUID prestadorId = crearUsuario("prestador-contraoferta-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Contraofertas HTTP");
+        UUID publicacionId = crearPublicacionActiva(prestadorId, categoriaId, "Clase con contraoferta HTTP", "Palermo", 15000);
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "MONDAY",
+                    "horaDesde": "10:00:00",
+                    "horaHasta": "11:00:00"
+                  },
+                  "descripcionNecesidad": "Busco una clase con contraoferta",
+                  "precioReferencia": 10000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidas = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        UUID distribucionId = UUID.fromString(recibidas.get(0).get("distribucionSolicitudId").asText());
+
+        mockMvc.perform(postJson("/api/v1/distribuciones/" + distribucionId + "/contraofertas", """
+                {
+                  "prestadorId": "%s",
+                  "precioPropuesto": 13000,
+                  "mensaje": "Puedo hacerlo con material incluido"
+                }
+                """.formatted(prestadorId)))
+                .andExpect(status().isAccepted());
+
+        JsonNode estadoContraoferta = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
+        assertEquals(1, estadoContraoferta.get("contraofertasPendientes").size());
+        UUID contraofertaId = UUID.fromString(estadoContraoferta.get("contraofertasPendientes").get(0).get("id").asText());
+        assertEquals(distribucionId.toString(), estadoContraoferta.get("contraofertasPendientes").get(0).get("distribucionSolicitudId").asText());
+
+        JsonNode resuelta = responseJson(postPath("/api/v1/contraofertas/" + contraofertaId + "/resoluciones", """
+                {
+                  "solicitanteId": "%s",
+                  "decision": "ACEPTAR"
+                }
+                """.formatted(solicitanteId)));
+        assertEquals("ACEPTADA", resuelta.get("estado").asText());
+
+        JsonNode estadoAceptado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
+        assertEquals(1, estadoAceptado.get("distribucionesAceptadas").size());
+        assertEquals(publicacionId.toString(), estadoAceptado.get("distribucionesAceptadas").get(0).get("publicacionServicioId").asText());
     }
 
     @Test
@@ -599,5 +843,9 @@ class MvpHttpFlowTests {
 
     private org.springframework.test.web.servlet.RequestBuilder patchJson(String path, String json) {
         return patch(path).contentType(MediaType.APPLICATION_JSON).content(json);
+    }
+
+    private org.springframework.test.web.servlet.RequestBuilder deleteJson(String path, String json) {
+        return delete(path).contentType(MediaType.APPLICATION_JSON).content(json);
     }
 }

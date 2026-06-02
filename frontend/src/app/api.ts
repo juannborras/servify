@@ -146,6 +146,7 @@ export interface ApiPublication {
   descripcion: string;
   modalidadServicio: ApiModality;
   ubicacion?: ApiLocation;
+  zonasCobertura?: ApiLocation[];
   disponibilidadesHorarias?: ApiAvailability[];
   precioBase?: number;
   estado?: string;
@@ -176,6 +177,30 @@ export interface ApiReceivedRequest extends ApiRequest {
   fechaExpiracion?: string;
 }
 
+export interface ApiAcceptedDistribution {
+  id: string;
+  solicitudId?: string;
+  publicacionServicioId?: string;
+  prestadorId?: string;
+  estado?: string;
+  rondaDistribucion?: number;
+  fechaEnvio?: string;
+  fechaRespuesta?: string;
+  fechaExpiracion?: string;
+}
+
+export interface ApiCounterOffer {
+  id: string;
+  distribucionSolicitudId?: string;
+  prestadorId?: string;
+  precioOriginal?: number;
+  precioPropuesto?: number;
+  mensaje?: string;
+  estado?: string;
+  fechaEmision?: string;
+  fechaResolucion?: string;
+}
+
 export interface ApiAssignmentState {
   solicitudId: string;
   solicitanteId?: string;
@@ -191,7 +216,8 @@ export interface ApiAssignmentState {
     fechaAsignacion?: string;
     fechaFinalizacion?: string;
   };
-  contraofertasPendientes?: unknown[];
+  contraofertasPendientes?: ApiCounterOffer[];
+  distribucionesAceptadas?: ApiAcceptedDistribution[];
   distribucionesActivas?: number;
   confirmadoPorSolicitante?: boolean;
   confirmadoPorPrestador?: boolean;
@@ -545,44 +571,78 @@ export const servifyApi = {
     horaHasta?: string;
   }) {
     const category = await this.ensureCategory(input.categoria);
-    const localidades = input.localidades?.length
+    const localidades = uniqueValues(input.localidades?.length
       ? input.localidades
-      : [input.localidad || LOCATION_OPTIONS[0]];
+      : [input.localidad || LOCATION_OPTIONS[0]]);
+    const zonasCobertura = localidades.map((localidad) => buildLocation(localidad, input.direccion));
     const disponibilidadesHorarias = buildAvailabilityRange(
       input.disponibilidadDiaDesde ?? input.disponibilidadDia,
       input.disponibilidadDiaHasta ?? input.disponibilidadDia,
       input.horaDesde,
       input.horaHasta
     );
-    const created: ApiPublication[] = [];
 
-    for (const localidad of localidades) {
-      const publication = await request<ApiPublication>("/publicaciones", {
-        method: "POST",
-        body: JSON.stringify({
-          usuarioId: input.usuarioId,
-          categoriaServicioId: category.id,
-          titulo: input.titulo,
-          descripcion: input.descripcion,
-          modalidadServicio: toApiModality(input.modalidad),
-          ubicacion: buildLocation(localidad, input.direccion),
-          disponibilidadesHorarias,
-          precioBase: parseMoney(input.precio),
-        }),
-      });
+    const publication = await request<ApiPublication>("/publicaciones", {
+      method: "POST",
+      body: JSON.stringify({
+        usuarioId: input.usuarioId,
+        categoriaServicioId: category.id,
+        titulo: input.titulo,
+        descripcion: input.descripcion,
+        modalidadServicio: toApiModality(input.modalidad),
+        ubicacion: zonasCobertura[0],
+        zonasCobertura,
+        disponibilidadesHorarias,
+        precioBase: parseMoney(input.precio),
+      }),
+    });
 
-      const activated = await request<ApiPublication>(`/publicaciones/${publication.id}/estado`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          usuarioId: input.usuarioId,
-          estadoDestino: "ACTIVA",
-          motivo: "Lista para recibir solicitudes",
-        }),
-      });
-      created.push(activated);
-    }
+    return request<ApiPublication>(`/publicaciones/${publication.id}/estado`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        usuarioId: input.usuarioId,
+        estadoDestino: "ACTIVA",
+        motivo: "Lista para recibir solicitudes",
+      }),
+    });
+  },
 
-    return created[0];
+  async updatePublication(publicacionId: string, input: {
+    usuarioId: string;
+    categoria: string;
+    titulo: string;
+    descripcion: string;
+    modalidad: string;
+    localidades?: string[];
+    direccion: string;
+    precio: string;
+    disponibilidadDiaDesde?: string;
+    disponibilidadDiaHasta?: string;
+    horaDesde?: string;
+    horaHasta?: string;
+  }) {
+    const category = await this.ensureCategory(input.categoria);
+    const localidades = uniqueValues(input.localidades?.length ? input.localidades : [LOCATION_OPTIONS[0]]);
+    const zonasCobertura = localidades.map((localidad) => buildLocation(localidad, input.direccion));
+    return request<ApiPublication>(`/publicaciones/${publicacionId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        usuarioId: input.usuarioId,
+        categoriaServicioId: category.id,
+        titulo: input.titulo,
+        descripcion: input.descripcion,
+        modalidadServicio: toApiModality(input.modalidad),
+        ubicacion: zonasCobertura[0],
+        zonasCobertura,
+        disponibilidadesHorarias: buildAvailabilityRange(
+          input.disponibilidadDiaDesde,
+          input.disponibilidadDiaHasta,
+          input.horaDesde,
+          input.horaHasta
+        ),
+        precioBase: parseMoney(input.precio),
+      }),
+    });
   },
 
   listUserPublications(usuarioId: string) {
@@ -637,8 +697,43 @@ export const servifyApi = {
     });
   },
 
+  async updateServiceRequest(input: {
+    solicitudId: string;
+    solicitanteId: string;
+    descripcion: string;
+    modalidad: string;
+    localidad: string;
+    precio?: string;
+    disponibilidadDia?: string;
+    horaDesde?: string;
+    horaHasta?: string;
+  }) {
+    return request<ApiRequest>(`/solicitudes/${input.solicitudId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        solicitanteId: input.solicitanteId,
+        modalidadServicio: toApiModality(input.modalidad),
+        ubicacion: buildLocation(input.localidad),
+        disponibilidadRequerida: buildAvailability(input.disponibilidadDia, input.horaDesde, input.horaHasta),
+        descripcionNecesidad: input.descripcion,
+        precioReferencia: parseOptionalMoney(input.precio),
+      }),
+    });
+  },
+
   listUserRequests(usuarioId: string) {
     return request<ApiRequest[]>(`/usuarios/${usuarioId}/solicitudes`);
+  },
+
+  cancelRequest(solicitudId: string, solicitanteId: string) {
+    return request<void>(`/solicitudes/${solicitudId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ solicitanteId }),
+    });
+  },
+
+  deleteRequest(solicitudId: string, solicitanteId: string) {
+    return this.cancelRequest(solicitudId, solicitanteId);
   },
 
   listReceivedRequests(usuarioId: string) {
@@ -647,8 +742,69 @@ export const servifyApi = {
     );
   },
 
+  respondToDistribution(input: {
+    distribucionSolicitudId: string;
+    prestadorId: string;
+    tipoRespuesta: "ACEPTAR" | "RECHAZAR";
+  }) {
+    return request<void>(`/distribuciones/${input.distribucionSolicitudId}/respuestas`, {
+      method: "POST",
+      body: JSON.stringify({
+        prestadorId: input.prestadorId,
+        tipoRespuesta: input.tipoRespuesta,
+      }),
+    });
+  },
+
+  createCounterOffer(input: {
+    distribucionSolicitudId: string;
+    prestadorId: string;
+    precioPropuesto: string;
+    mensaje?: string;
+  }) {
+    return request<void>(`/distribuciones/${input.distribucionSolicitudId}/contraofertas`, {
+      method: "POST",
+      body: JSON.stringify({
+        prestadorId: input.prestadorId,
+        precioPropuesto: parseMoney(input.precioPropuesto),
+        mensaje: input.mensaje ?? "",
+      }),
+    });
+  },
+
+  resolveCounterOffer(input: {
+    contraofertaId: string;
+    solicitanteId: string;
+    decision: "ACEPTAR" | "RECHAZAR";
+  }) {
+    return request<ApiCounterOffer>(`/contraofertas/${input.contraofertaId}/resoluciones`, {
+      method: "POST",
+      body: JSON.stringify({
+        solicitanteId: input.solicitanteId,
+        decision: input.decision,
+      }),
+    });
+  },
+
   getAssignmentState(solicitudId: string) {
     return request<ApiAssignmentState>(`/solicitudes/${solicitudId}/estado-asignacion`);
+  },
+
+  confirmAssignment(input: {
+    solicitudId: string;
+    distribucionSolicitudId: string;
+    solicitanteId: string;
+  }) {
+    return request<NonNullable<ApiAssignmentState["asignacion"]>>(
+      `/solicitudes/${input.solicitudId}/asignaciones/confirmaciones`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          distribucionSolicitudId: input.distribucionSolicitudId,
+          solicitanteId: input.solicitanteId,
+        }),
+      }
+    );
   },
 
   async confirmServiceCompletion(input: {
@@ -665,6 +821,28 @@ export const servifyApi = {
         confirmanteId: input.confirmanteId,
         rolConfirmante: input.rolConfirmante,
         observacion: input.observacion ?? "",
+      }),
+    });
+  },
+
+  async rateService(input: {
+    solicitudId: string;
+    asignacionServicioId: string;
+    solicitanteId: string;
+    prestadorId: string;
+    calificadorId: string;
+    rolCalificador: "SOLICITANTE" | "PRESTADOR";
+    puntaje: number;
+  }) {
+    return request<void>(`/solicitudes/${input.solicitudId}/calificaciones`, {
+      method: "POST",
+      body: JSON.stringify({
+        asignacionServicioId: input.asignacionServicioId,
+        solicitanteId: input.solicitanteId,
+        prestadorId: input.prestadorId,
+        calificadorId: input.calificadorId,
+        rolCalificador: input.rolCalificador,
+        puntaje: input.puntaje,
       }),
     });
   },
@@ -833,6 +1011,11 @@ function normalizeLocationKey(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]/g, "")
     .toLowerCase();
+}
+
+function uniqueValues(values: string[]): string[] {
+  const unique = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  return unique.length > 0 ? unique : [LOCATION_OPTIONS[0]];
 }
 
 function normalizeReceivedRequest(request: ApiReceivedRequest): ApiReceivedRequest {

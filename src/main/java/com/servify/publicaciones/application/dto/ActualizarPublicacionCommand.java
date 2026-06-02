@@ -20,6 +20,7 @@ public class ActualizarPublicacionCommand {
     private String descripcion;
     private ModalidadServicio modalidadServicio;
     private Ubicacion ubicacion;
+    private List<Ubicacion> zonasCobertura;
     private List<DisponibilidadHoraria> disponibilidadesHorarias;
     private BigDecimal precioBase;
 
@@ -35,6 +36,30 @@ public class ActualizarPublicacionCommand {
                                         Ubicacion ubicacion,
                                         List<DisponibilidadHoraria> disponibilidadesHorarias,
                                         BigDecimal precioBase) {
+        this(
+                publicacionServicioId,
+                usuarioId,
+                categoriaServicioId,
+                titulo,
+                descripcion,
+                modalidadServicio,
+                ubicacion,
+                ubicacion == null ? List.of() : List.of(ubicacion),
+                disponibilidadesHorarias,
+                precioBase
+        );
+    }
+
+    public ActualizarPublicacionCommand(UUID publicacionServicioId,
+                                        UUID usuarioId,
+                                        UUID categoriaServicioId,
+                                        String titulo,
+                                        String descripcion,
+                                        ModalidadServicio modalidadServicio,
+                                        Ubicacion ubicacion,
+                                        List<Ubicacion> zonasCobertura,
+                                        List<DisponibilidadHoraria> disponibilidadesHorarias,
+                                        BigDecimal precioBase) {
         this.publicacionServicioId = publicacionServicioId;
         this.usuarioId = usuarioId;
         this.categoriaServicioId = categoriaServicioId;
@@ -42,6 +67,7 @@ public class ActualizarPublicacionCommand {
         this.descripcion = descripcion;
         this.modalidadServicio = modalidadServicio;
         this.ubicacion = ubicacion;
+        this.zonasCobertura = zonasCobertura;
         this.disponibilidadesHorarias = disponibilidadesHorarias;
         this.precioBase = precioBase;
     }
@@ -72,6 +98,10 @@ public class ActualizarPublicacionCommand {
 
     public Ubicacion getUbicacion() {
         return ubicacion;
+    }
+
+    public List<Ubicacion> getZonasCobertura() {
+        return zonasCobertura;
     }
 
     public List<DisponibilidadHoraria> getDisponibilidadesHorarias() {

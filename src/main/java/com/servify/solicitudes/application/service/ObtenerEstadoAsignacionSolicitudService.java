@@ -2,16 +2,21 @@ package com.servify.solicitudes.application.service;
 
 import com.servify.solicitudes.application.dto.AsignacionServicioResult;
 import com.servify.solicitudes.application.dto.ContraofertaResult;
+import com.servify.solicitudes.application.dto.DistribucionSolicitudResult;
 import com.servify.solicitudes.application.dto.EstadoAsignacionSolicitudResult;
 import com.servify.solicitudes.application.port.in.ObtenerEstadoAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.out.AsignacionServicioRepositoryPort;
+import com.servify.solicitudes.application.port.out.ConfirmacionFinalizacionRepositoryPort;
 import com.servify.solicitudes.application.port.out.ContraofertaRepositoryPort;
 import com.servify.solicitudes.application.port.out.DistribucionSolicitudRepositoryPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
 import com.servify.solicitudes.domain.model.AsignacionServicio;
+import com.servify.solicitudes.domain.model.ConfirmacionFinalizacion;
 import com.servify.solicitudes.domain.model.Contraoferta;
 import com.servify.solicitudes.domain.model.DistribucionSolicitud;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
+import com.servify.solicitudes.domain.enumtype.EstadoSolicitud;
+import com.servify.solicitudes.domain.enumtype.RolConfirmante;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,15 +28,18 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
     private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
     private final AsignacionServicioRepositoryPort asignacionServicioRepositoryPort;
     private final ContraofertaRepositoryPort contraofertaRepositoryPort;
+    private final ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort;
 
     public ObtenerEstadoAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
                                                    DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
                                                    AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
-                                                   ContraofertaRepositoryPort contraofertaRepositoryPort) {
+                                                   ContraofertaRepositoryPort contraofertaRepositoryPort,
+                                                   ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.asignacionServicioRepositoryPort = asignacionServicioRepositoryPort;
         this.contraofertaRepositoryPort = contraofertaRepositoryPort;
+        this.confirmacionFinalizacionRepositoryPort = confirmacionFinalizacionRepositoryPort;
     }
 
     @Override
@@ -46,9 +54,20 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
         SolicitudServicio solicitud = obtenerSolicitudExistente(solicitudId);
         Optional<AsignacionServicio> asignacion = obtenerAsignacion(solicitudId);
         List<DistribucionSolicitud> distribucionesActivas = obtenerDistribucionesActivas(solicitudId);
+        List<DistribucionSolicitud> distribucionesAceptadas = obtenerDistribucionesAceptadas(distribucionesActivas);
         List<Contraoferta> contraofertasPendientes = obtenerContraofertasPendientes(distribucionesActivas);
+        List<ConfirmacionFinalizacion> confirmaciones = asignacion
+                .map(a -> obtenerConfirmacionesDeAsignacion(a.getId()))
+                .orElseGet(java.util.Collections::emptyList);
 
-        return construirResultado(solicitud, asignacion, contraofertasPendientes, distribucionesActivas == null ? 0 : distribucionesActivas.size());
+        return construirResultado(
+                solicitud,
+                asignacion,
+                contraofertasPendientes,
+                distribucionesAceptadas,
+                confirmaciones,
+                distribucionesActivas == null ? 0 : distribucionesActivas.size()
+        );
     }
 
     protected SolicitudServicio obtenerSolicitudExistente(UUID solicitudId) {
@@ -71,6 +90,22 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
             return java.util.Collections.emptyList();
         }
         return this.distribucionSolicitudRepositoryPort.buscarActivasPorSolicitudId(solicitudId);
+    }
+
+    protected List<DistribucionSolicitud> obtenerDistribucionesAceptadas(List<DistribucionSolicitud> distribuciones) {
+        if (distribuciones == null || distribuciones.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        return distribuciones.stream()
+                .filter(d -> d != null && d.estaAceptada())
+                .toList();
+    }
+
+    protected List<ConfirmacionFinalizacion> obtenerConfirmacionesDeAsignacion(UUID asignacionServicioId) {
+        if (asignacionServicioId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return this.confirmacionFinalizacionRepositoryPort.buscarPorAsignacionServicioId(asignacionServicioId);
     }
 
     protected List<Contraoferta> obtenerContraofertasPendientes(List<DistribucionSolicitud> distribuciones) {
@@ -103,6 +138,23 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
             .build();
     }
 
+    protected DistribucionSolicitudResult construirDistribucionResult(DistribucionSolicitud distribucionSolicitud) {
+        if (distribucionSolicitud == null) {
+            return null;
+        }
+        return DistribucionSolicitudResult.builder()
+                .id(distribucionSolicitud.getId())
+                .solicitudId(distribucionSolicitud.getSolicitudId())
+                .publicacionServicioId(distribucionSolicitud.getPublicacionServicioId())
+                .prestadorId(distribucionSolicitud.getPrestadorId())
+                .estado(distribucionSolicitud.getEstado())
+                .rondaDistribucion(distribucionSolicitud.getRondaDistribucion())
+                .fechaEnvio(distribucionSolicitud.getFechaEnvio())
+                .fechaRespuesta(distribucionSolicitud.getFechaRespuesta())
+                .fechaExpiracion(distribucionSolicitud.getFechaExpiracion())
+                .build();
+    }
+
     protected ContraofertaResult construirContraofertaResult(Contraoferta contraoferta) {
         if (contraoferta == null) {
             return null;
@@ -123,14 +175,37 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
     protected EstadoAsignacionSolicitudResult construirResultado(SolicitudServicio solicitudServicio,
                                                                  Optional<AsignacionServicio> asignacionServicio,
                                                                  List<Contraoferta> contraofertasPendientes,
+                                                                 List<DistribucionSolicitud> distribucionesAceptadas,
+                                                                 List<ConfirmacionFinalizacion> confirmaciones,
                                                                  Integer distribucionesActivas) {
+        boolean confirmadoPorSolicitante = existeConfirmacion(confirmaciones, RolConfirmante.SOLICITANTE);
+        boolean confirmadoPorPrestador = existeConfirmacion(confirmaciones, RolConfirmante.PRESTADOR);
+        boolean asignacionFinalizada = asignacionServicio
+                .map(AsignacionServicio::estaFinalizada)
+                .orElse(false);
+        boolean finalizacionConfirmada = confirmadoPorSolicitante
+                && confirmadoPorPrestador
+                || asignacionFinalizada
+                || solicitudServicio.getEstado() == EstadoSolicitud.FINALIZADA;
+
         EstadoAsignacionSolicitudResult.Builder builder = EstadoAsignacionSolicitudResult.builder()
                 .solicitudId(solicitudServicio.getId())
                 .solicitanteId(solicitudServicio.getSolicitanteId())
                 .estadoSolicitud(solicitudServicio.getEstado())
-                .distribucionesActivas(distribucionesActivas == null ? 0 : distribucionesActivas);
+                .distribucionesActivas(distribucionesActivas == null ? 0 : distribucionesActivas)
+                .confirmadoPorSolicitante(confirmadoPorSolicitante || finalizacionConfirmada)
+                .confirmadoPorPrestador(confirmadoPorPrestador || finalizacionConfirmada)
+                .finalizacionConfirmada(finalizacionConfirmada);
 
         asignacionServicio.ifPresent(a -> builder.asignacion(construirAsignacionResult(a)));
+
+        if (distribucionesAceptadas != null && !distribucionesAceptadas.isEmpty()) {
+            java.util.List<DistribucionSolicitudResult> resultados = new java.util.ArrayList<>();
+            for (DistribucionSolicitud d : distribucionesAceptadas) {
+                resultados.add(construirDistribucionResult(d));
+            }
+            builder.distribucionesAceptadas(resultados);
+        }
 
         if (contraofertasPendientes != null && !contraofertasPendientes.isEmpty()) {
             java.util.List<ContraofertaResult> resultados = new java.util.ArrayList<>();
@@ -141,5 +216,13 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
         }
 
         return builder.build();
+    }
+
+    protected boolean existeConfirmacion(List<ConfirmacionFinalizacion> confirmaciones, RolConfirmante rol) {
+        if (confirmaciones == null || confirmaciones.isEmpty() || rol == null) {
+            return false;
+        }
+        return confirmaciones.stream()
+                .anyMatch(c -> c != null && c.estaConfirmada() && rol == c.getRolConfirmante());
     }
 }

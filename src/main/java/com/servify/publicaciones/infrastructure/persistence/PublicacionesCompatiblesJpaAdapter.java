@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,14 +43,10 @@ public class PublicacionesCompatiblesJpaAdapter implements PublicacionesCompatib
         Map<UUID, UUID> compatibles = new LinkedHashMap<>();
 
         publicacionRepo.findByEstado("activa").forEach(e -> {
-            if (tienePrecioMaximo(precioMaximo) && e.getPrecioBase() != null
-                    && e.getPrecioBase().compareTo(precioMaximo) > 0) {
-                return;
-            }
             var publicacion = publicacionAdapter.buscarPorId(UsuarioJpaAdapter.uuidFromLong(e.getId())).orElse(null);
             if (publicacion != null && politica.esCompatible(
                     publicacion, categoria, modalidadRequerida, ubicacionRequerida, disponibilidadRequerida)
-                    && estaDentroDelRadio(modalidadRequerida, ubicacionRequerida, publicacion.getUbicacion(), radioBusquedaKm)) {
+                    && estaDentroDelRadio(modalidadRequerida, ubicacionRequerida, publicacion.getUbicacionesParaMatching(), radioBusquedaKm)) {
                 compatibles.put(publicacion.getId(), publicacion.getUsuarioId());
             }
         });
@@ -57,13 +54,9 @@ public class PublicacionesCompatiblesJpaAdapter implements PublicacionesCompatib
         return compatibles;
     }
 
-    private boolean tienePrecioMaximo(BigDecimal precioMaximo) {
-        return precioMaximo != null && precioMaximo.compareTo(BigDecimal.ZERO) > 0;
-    }
-
     private boolean estaDentroDelRadio(ModalidadServicio modalidadRequerida,
                                        Ubicacion ubicacionRequerida,
-                                       Ubicacion ubicacionPublicacion,
+                                       List<Ubicacion> ubicacionesPublicacion,
                                        Integer radioBusquedaKm) {
         if (ModalidadServicio.VIRTUAL.equals(modalidadRequerida)) {
             return true;
@@ -71,17 +64,23 @@ public class PublicacionesCompatiblesJpaAdapter implements PublicacionesCompatib
         if (radioBusquedaKm == null || radioBusquedaKm <= 0) {
             return true;
         }
-        if (ubicacionRequerida == null || ubicacionPublicacion == null
-                || !ubicacionRequerida.tieneCoordenadasValidas()
-                || !ubicacionPublicacion.tieneCoordenadasValidas()) {
+        if (ubicacionRequerida == null || ubicacionesPublicacion == null || ubicacionesPublicacion.isEmpty()
+                || !ubicacionRequerida.tieneCoordenadasValidas()) {
             return true;
         }
-        return calcularHaversine(
-                ubicacionRequerida.getLatitud(),
-                ubicacionRequerida.getLongitud(),
-                ubicacionPublicacion.getLatitud(),
-                ubicacionPublicacion.getLongitud()
-        ) <= radioBusquedaKm;
+        List<Ubicacion> ubicacionesConCoordenadas = ubicacionesPublicacion.stream()
+                .filter(Ubicacion::tieneCoordenadasValidas)
+                .toList();
+        if (ubicacionesConCoordenadas.isEmpty()) {
+            return true;
+        }
+        return ubicacionesConCoordenadas.stream()
+                .anyMatch(ubicacionPublicacion -> calcularHaversine(
+                        ubicacionRequerida.getLatitud(),
+                        ubicacionRequerida.getLongitud(),
+                        ubicacionPublicacion.getLatitud(),
+                        ubicacionPublicacion.getLongitud()
+                ) <= radioBusquedaKm);
     }
 
     private double calcularHaversine(double lat1, double lon1, double lat2, double lon2) {

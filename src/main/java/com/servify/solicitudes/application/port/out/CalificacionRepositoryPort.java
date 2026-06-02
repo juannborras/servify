@@ -1,6 +1,7 @@
 package com.servify.solicitudes.application.port.out;
 
 import com.servify.solicitudes.domain.model.Calificacion;
+import com.servify.solicitudes.domain.enumtype.RolConfirmante;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +26,11 @@ public interface CalificacionRepositoryPort {
     Optional<Calificacion> buscarPorId(UUID calificacionId);
 
     Optional<Calificacion> buscarPorSolicitudId(UUID solicitudId);
+
+    Optional<Calificacion> buscarPorAsignacionServicioIdYRolCalificador(
+            UUID asignacionServicioId,
+            RolConfirmante rolCalificador
+    );
 
     List<Calificacion> buscarPorPrestadorId(UUID prestadorId);
 

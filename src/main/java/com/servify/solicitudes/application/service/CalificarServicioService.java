@@ -1,27 +1,19 @@
 package com.servify.solicitudes.application.service;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
-import java.util.List;
-
 import com.servify.solicitudes.application.dto.CalificarServicioCommand;
 import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
 import com.servify.solicitudes.application.port.out.AsignacionServicioRepositoryPort;
 import com.servify.solicitudes.application.port.out.CalificacionRepositoryPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
+import com.servify.solicitudes.domain.enumtype.RolConfirmante;
 import com.servify.solicitudes.domain.model.AsignacionServicio;
 import com.servify.solicitudes.domain.model.Calificacion;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
 import com.servify.solicitudes.domain.service.PoliticaCalificacion;
 
-
-/**
- * Es la implementación del caso de uso mediante el cual el solicitante califica al prestador una vez finalizado el servicio.
- * El MVP exige que:
- * solo se califique una solicitud finalizada
- * la calificación sea de 1 a 5 estrellas
- * y que no exista más de una calificación por solicitud
- */
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 public class CalificarServicioService implements CalificarServicioUseCase {
 
@@ -42,35 +34,40 @@ public class CalificarServicioService implements CalificarServicioUseCase {
 
     @Override
     public void calificar(CalificarServicioCommand command) {
-        /**
-         * Ejecuta la lógica de calificación del servicio.
-         * - Valida campos del comando.
-         * - Recupera la solicitud y la asignación asociada.
-         * - Verifica correspondencia y permisos del solicitante/prestador.
-         * - Valida que la calificación esté permitida por la política y luego persiste la calificación.
-         */
         if (command == null) {
-            throw new IllegalArgumentException("El comando de calificación no puede ser nulo");
+            throw new IllegalArgumentException("El comando de calificacion no puede ser nulo");
         }
-        
         if (command.getSolicitudId() == null || command.getAsignacionServicioId() == null ||
                 command.getSolicitanteId() == null || command.getPrestadorId() == null ||
+                command.getCalificadorIdOrDefault() == null || command.getRolCalificadorOrDefault() == null ||
                 command.getPuntaje() == null) {
-            throw new IllegalArgumentException("Todos los campos del comando de calificación son obligatorios");
+            throw new IllegalArgumentException("Todos los campos del comando de calificacion son obligatorios");
         }
-        
+
         SolicitudServicio solicitudServicio = obtenerSolicitudExistente(command.getSolicitudId());
         AsignacionServicio asignacionServicio = obtenerAsignacionExistente(command.getAsignacionServicioId());
-        
+
         validarCorrespondenciaSolicitudAsignacion(solicitudServicio, asignacionServicio);
-        validarSolicitante(solicitudServicio, command.getSolicitanteId());
-        validarPrestadorAsignado(asignacionServicio, command.getPrestadorId());
-        
-        validarCalificacionPermitida(solicitudServicio, command.getPrestadorId(), command.getPuntaje());
-        
-        LocalDateTime fechaCalificacion = obtenerFechaActual();
-        Calificacion calificacion = construirCalificacion(command, fechaCalificacion);
-        
+        validarParticipantesAsignacion(solicitudServicio, asignacionServicio, command);
+        validarCalificador(
+                solicitudServicio,
+                asignacionServicio,
+                command.getCalificadorIdOrDefault(),
+                command.getRolCalificadorOrDefault()
+        );
+        validarCalificacionPermitida(
+                solicitudServicio,
+                asignacionServicio,
+                command.getRolCalificadorOrDefault(),
+                command.getPuntaje()
+        );
+
+        Calificacion calificacion = construirCalificacion(
+                command,
+                solicitudServicio,
+                asignacionServicio,
+                obtenerFechaActual()
+        );
         persistirCalificacion(calificacion);
     }
 
@@ -78,7 +75,7 @@ public class CalificarServicioService implements CalificarServicioUseCase {
         if (solicitudId == null) {
             throw new IllegalArgumentException("El ID de la solicitud no puede ser nulo");
         }
-        
+
         return solicitudServicioRepositoryPort.buscarPorId(solicitudId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "La solicitud con ID " + solicitudId + " no existe"));
@@ -86,76 +83,92 @@ public class CalificarServicioService implements CalificarServicioUseCase {
 
     protected AsignacionServicio obtenerAsignacionExistente(UUID asignacionServicioId) {
         if (asignacionServicioId == null) {
-            throw new IllegalArgumentException("El ID de la asignación no puede ser nulo");
+            throw new IllegalArgumentException("El ID de la asignacion no puede ser nulo");
         }
-        
+
         return asignacionServicioRepositoryPort.buscarPorId(asignacionServicioId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "La asignación con ID " + asignacionServicioId + " no existe"));
+                        "La asignacion con ID " + asignacionServicioId + " no existe"));
     }
 
     protected void validarCorrespondenciaSolicitudAsignacion(SolicitudServicio solicitudServicio,
                                                              AsignacionServicio asignacionServicio) {
         if (!asignacionServicio.getSolicitudId().equals(solicitudServicio.getId())) {
-            throw new IllegalArgumentException(
-                    "La asignación no corresponde a la solicitud indicada");
+            throw new IllegalArgumentException("La asignacion no corresponde a la solicitud indicada");
         }
     }
 
-    protected void validarSolicitante(SolicitudServicio solicitudServicio, UUID solicitanteId) {
-        if (!solicitudServicio.getSolicitanteId().equals(solicitanteId)) {
-            throw new IllegalArgumentException(
-                    "Solo el solicitante puede calificar el servicio");
+    protected void validarParticipantesAsignacion(SolicitudServicio solicitudServicio,
+                                                  AsignacionServicio asignacionServicio,
+                                                  CalificarServicioCommand command) {
+        if (!solicitudServicio.getSolicitanteId().equals(command.getSolicitanteId())) {
+            throw new IllegalArgumentException("El solicitante indicado no corresponde a la solicitud");
+        }
+        if (!asignacionServicio.getPrestadorId().equals(command.getPrestadorId())) {
+            throw new IllegalArgumentException("El prestador indicado no corresponde al asignado");
         }
     }
 
-    protected void validarPrestadorAsignado(AsignacionServicio asignacionServicio, UUID prestadorId) {
-        if (!asignacionServicio.getPrestadorId().equals(prestadorId)) {
-            throw new IllegalArgumentException(
-                    "El prestador calificado no corresponde al asignado");
+    protected void validarCalificador(SolicitudServicio solicitudServicio,
+                                      AsignacionServicio asignacionServicio,
+                                      UUID calificadorId,
+                                      RolConfirmante rolCalificador) {
+        if (rolCalificador == RolConfirmante.SOLICITANTE
+                && !solicitudServicio.getSolicitanteId().equals(calificadorId)) {
+            throw new IllegalArgumentException("Solo el solicitante puede emitir esta calificacion");
+        }
+        if (rolCalificador == RolConfirmante.PRESTADOR
+                && !asignacionServicio.getPrestadorId().equals(calificadorId)) {
+            throw new IllegalArgumentException("Solo el prestador asignado puede emitir esta calificacion");
         }
     }
 
     protected void validarCalificacionPermitida(SolicitudServicio solicitudServicio,
-                                                UUID prestadorId,
+                                                AsignacionServicio asignacionServicio,
+                                                RolConfirmante rolCalificador,
                                                 Integer puntaje) {
-        /**
-         * Valida que la calificación esté permitida según la política del dominio.
-         * - Comprueba si ya existe una calificación para la solicitud.
-         * - Verifica que la solicitud esté en el estado esperado y que el puntaje sea válido.
-         */
-        List<Calificacion> calificacionesExistentes = calificacionRepositoryPort.buscarPorSolicitudId(solicitudServicio.getId())
-            .map(List::of)
-            .orElseGet(List::of);
+        List<Calificacion> calificacionesExistentes = calificacionRepositoryPort
+                .buscarPorAsignacionServicioIdYRolCalificador(asignacionServicio.getId(), rolCalificador)
+                .map(List::of)
+                .orElseGet(List::of);
 
-        if (!politicaCalificacion.puedeCalificarse(solicitudServicio, calificacionesExistentes, prestadorId)) {
+        if (!politicaCalificacion.puedeCalificarse(
+                solicitudServicio,
+                calificacionesExistentes,
+                asignacionServicio.getPrestadorId()
+        )) {
             throw new IllegalArgumentException(
-                "No se puede calificar este servicio. Verifique que la solicitud esté finalizada " +
-                    "y que no exista una calificación previa");
+                    "No se puede calificar este servicio. Verifique que la solicitud este finalizada " +
+                            "y que no exista una calificacion previa para este rol");
         }
 
         if (!politicaCalificacion.puntajePermitido(puntaje)) {
-            throw new IllegalArgumentException(
-                "El puntaje debe ser un valor entre 1 y 5");
+            throw new IllegalArgumentException("El puntaje debe ser un valor entre 1 y 5");
         }
     }
 
     protected Calificacion construirCalificacion(CalificarServicioCommand command,
+                                                 SolicitudServicio solicitudServicio,
+                                                 AsignacionServicio asignacionServicio,
                                                  LocalDateTime fechaCalificacion) {
-        /**
-         * Construye la entidad `Calificacion` a persistir con un identificador generado
-         * y la fecha de calificación proporcionada.
-         */
         UUID calificacionId = generarIdCalificacion();
+        RolConfirmante rol = command.getRolCalificadorOrDefault();
+        UUID calificadorId = command.getCalificadorIdOrDefault();
+        UUID calificadoId = rol == RolConfirmante.PRESTADOR
+                ? solicitudServicio.getSolicitanteId()
+                : asignacionServicio.getPrestadorId();
 
         return new Calificacion(
-            calificacionId,
-            command.getSolicitudId(),
-            command.getAsignacionServicioId(),
-            command.getSolicitanteId(),
-            command.getPrestadorId(),
-            command.getPuntaje(),
-            fechaCalificacion
+                calificacionId,
+                command.getSolicitudId(),
+                command.getAsignacionServicioId(),
+                command.getSolicitanteId(),
+                command.getPrestadorId(),
+                calificadorId,
+                calificadoId,
+                rol,
+                command.getPuntaje(),
+                fechaCalificacion
         );
     }
 

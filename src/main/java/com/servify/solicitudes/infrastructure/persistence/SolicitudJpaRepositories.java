@@ -21,7 +21,8 @@ interface AsignacionServicioJpaRepository extends JpaRepository<AsignacionServic
 }
 
 interface CalificacionJpaRepository extends JpaRepository<CalificacionJpaEntity, Long> {
-    Optional<CalificacionJpaEntity> findByAsignacionId(Long asignacionId);
+    List<CalificacionJpaEntity> findByAsignacionId(Long asignacionId);
+    Optional<CalificacionJpaEntity> findByAsignacionIdAndRolCalificador(Long asignacionId, String rolCalificador);
 }
 
 interface ContraofertaJpaRepository extends JpaRepository<ContraofertaJpaEntity, UUID> {

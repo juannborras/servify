@@ -4,6 +4,7 @@ import com.servify.publicaciones.application.dto.BuscarPublicacionesCompatiblesQ
 import com.servify.publicaciones.application.dto.CambiarEstadoCategoriaServicioCommand;
 import com.servify.publicaciones.application.dto.CambiarEstadoPublicacionCommand;
 import com.servify.publicaciones.application.dto.CategoriaServicioResult;
+import com.servify.publicaciones.application.dto.ActualizarPublicacionCommand;
 import com.servify.publicaciones.application.dto.CrearCategoriaServicioCommand;
 import com.servify.publicaciones.application.dto.CrearPublicacionCommand;
 import com.servify.publicaciones.application.dto.PublicacionCompatibleResult;
@@ -11,6 +12,7 @@ import com.servify.publicaciones.application.dto.PublicacionServicioResult;
 import com.servify.publicaciones.application.port.in.BuscarPublicacionesCompatiblesUseCase;
 import com.servify.publicaciones.application.port.in.CambiarEstadoCategoriaServicioUseCase;
 import com.servify.publicaciones.application.port.in.CambiarEstadoPublicacionUseCase;
+import com.servify.publicaciones.application.port.in.ActualizarPublicacionUseCase;
 import com.servify.publicaciones.application.port.in.CrearCategoriaServicioUseCase;
 import com.servify.publicaciones.application.port.in.CrearPublicacionUseCase;
 import com.servify.publicaciones.application.port.in.ListarCategoriasActivasUseCase;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,6 +47,7 @@ public class PublicacionesApiController {
     private final CambiarEstadoCategoriaServicioUseCase cambiarEstadoCategoriaServicioUseCase;
     private final ListarCategoriasActivasUseCase listarCategoriasActivasUseCase;
     private final CrearPublicacionUseCase crearPublicacionUseCase;
+    private final ActualizarPublicacionUseCase actualizarPublicacionUseCase;
     private final CambiarEstadoPublicacionUseCase cambiarEstadoPublicacionUseCase;
     private final ObtenerPublicacionUseCase obtenerPublicacionUseCase;
     private final ListarPublicacionesDeUsuarioUseCase listarPublicacionesDeUsuarioUseCase;
@@ -55,6 +59,7 @@ public class PublicacionesApiController {
             CambiarEstadoCategoriaServicioUseCase cambiarEstadoCategoriaServicioUseCase,
             ListarCategoriasActivasUseCase listarCategoriasActivasUseCase,
             CrearPublicacionUseCase crearPublicacionUseCase,
+            ActualizarPublicacionUseCase actualizarPublicacionUseCase,
             CambiarEstadoPublicacionUseCase cambiarEstadoPublicacionUseCase,
             ObtenerPublicacionUseCase obtenerPublicacionUseCase,
             ListarPublicacionesDeUsuarioUseCase listarPublicacionesDeUsuarioUseCase,
@@ -65,6 +70,7 @@ public class PublicacionesApiController {
         this.cambiarEstadoCategoriaServicioUseCase = cambiarEstadoCategoriaServicioUseCase;
         this.listarCategoriasActivasUseCase = listarCategoriasActivasUseCase;
         this.crearPublicacionUseCase = crearPublicacionUseCase;
+        this.actualizarPublicacionUseCase = actualizarPublicacionUseCase;
         this.cambiarEstadoPublicacionUseCase = cambiarEstadoPublicacionUseCase;
         this.obtenerPublicacionUseCase = obtenerPublicacionUseCase;
         this.listarPublicacionesDeUsuarioUseCase = listarPublicacionesDeUsuarioUseCase;
@@ -112,6 +118,7 @@ public class PublicacionesApiController {
     @PostMapping("/publicaciones")
     public ResponseEntity<PublicacionServicioResult> crearPublicacion(@RequestBody CrearPublicacionRequest request) {
         Ubicacion ubicacion = MvpWebMapper.toUbicacion(request.ubicacion);
+        List<Ubicacion> zonasCobertura = MvpWebMapper.toUbicaciones(request.zonasCobertura);
         List<DisponibilidadHoraria> disponibilidades = MvpWebMapper.toDisponibilidades(request.disponibilidadesHorarias);
         PublicacionServicioResult result = crearPublicacionUseCase.crear(
                 new CrearPublicacionCommand(
@@ -121,6 +128,7 @@ public class PublicacionesApiController {
                         request.descripcion,
                         request.modalidadServicio,
                         ubicacion,
+                        zonasCobertura,
                         disponibilidades,
                         request.precioBase
                 )
@@ -128,6 +136,31 @@ public class PublicacionesApiController {
         return ResponseEntity
                 .created(URI.create("/api/v1/publicaciones/" + result.getId()))
                 .body(result);
+    }
+
+    @PutMapping("/publicaciones/{publicacionId}")
+    public ResponseEntity<PublicacionServicioResult> actualizarPublicacion(
+            @PathVariable UUID publicacionId,
+            @RequestBody ActualizarPublicacionRequest request
+    ) {
+        Ubicacion ubicacion = MvpWebMapper.toUbicacion(request.ubicacion);
+        List<Ubicacion> zonasCobertura = MvpWebMapper.toUbicaciones(request.zonasCobertura);
+        List<DisponibilidadHoraria> disponibilidades = MvpWebMapper.toDisponibilidades(request.disponibilidadesHorarias);
+        PublicacionServicioResult result = actualizarPublicacionUseCase.actualizar(
+                new ActualizarPublicacionCommand(
+                        publicacionId,
+                        request.usuarioId,
+                        request.categoriaServicioId,
+                        request.titulo,
+                        request.descripcion,
+                        request.modalidadServicio,
+                        ubicacion,
+                        zonasCobertura,
+                        disponibilidades,
+                        request.precioBase
+                )
+        );
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/publicaciones/{publicacionId}")
@@ -195,6 +228,19 @@ public class PublicacionesApiController {
         public String descripcion;
         public ModalidadServicio modalidadServicio;
         public MvpWebMapper.UbicacionPayload ubicacion;
+        public List<MvpWebMapper.UbicacionPayload> zonasCobertura;
+        public List<MvpWebMapper.DisponibilidadPayload> disponibilidadesHorarias;
+        public BigDecimal precioBase;
+    }
+
+    public static class ActualizarPublicacionRequest {
+        public UUID usuarioId;
+        public UUID categoriaServicioId;
+        public String titulo;
+        public String descripcion;
+        public ModalidadServicio modalidadServicio;
+        public MvpWebMapper.UbicacionPayload ubicacion;
+        public List<MvpWebMapper.UbicacionPayload> zonasCobertura;
         public List<MvpWebMapper.DisponibilidadPayload> disponibilidadesHorarias;
         public BigDecimal precioBase;
     }

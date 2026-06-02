@@ -100,7 +100,7 @@ export function CategoryPublicationsScreen({ categoryName, onBack }: CategoryPub
               <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5, marginTop: 10 }}>{publication.descripcion}</p>
 
               <div className="flex flex-wrap gap-3 mt-3">
-                <Info icon={<MapPin size={13} color="#94a3b8" strokeWidth={1.8} />} label={publication.ubicacion?.localidad ?? "CABA"} />
+                <Info icon={<MapPin size={13} color="#94a3b8" strokeWidth={1.8} />} label={formatAreas(publication)} />
                 <Info icon={<Clock size={13} color="#94a3b8" strokeWidth={1.8} />} label={formatAvailability(publication)} />
                 <Info icon={<DollarSign size={13} color="#94a3b8" strokeWidth={1.8} />} label={formatMoney(publication.precioBase)} />
               </div>
@@ -119,6 +119,15 @@ function Info({ icon, label }: { icon: React.ReactNode; label: string }) {
       <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>{label}</span>
     </div>
   );
+}
+
+function formatAreas(publication: ApiPublication) {
+  const areas = (publication.zonasCobertura?.length ? publication.zonasCobertura : publication.ubicacion ? [publication.ubicacion] : [])
+    .map((zona) => zona.localidad || zona.ciudad || "CABA")
+    .filter(Boolean);
+  const unique = Array.from(new Set(areas.length ? areas : ["CABA"]));
+  if (unique.length <= 2) return unique.join(", ");
+  return `${unique.slice(0, 2).join(", ")} +${unique.length - 2}`;
 }
 
 function formatAvailability(publication: ApiPublication) {

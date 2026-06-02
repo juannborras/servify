@@ -4,6 +4,7 @@ import com.servify.shared.domain.enumtype.ModalidadServicio;
 import com.servify.shared.domain.valueobject.DisponibilidadHoraria;
 import com.servify.shared.domain.valueobject.Ubicacion;
 import com.servify.shared.infrastructure.web.MvpWebMapper;
+import com.servify.solicitudes.application.dto.ActualizarSolicitudServicioCommand;
 import com.servify.solicitudes.application.dto.AsignacionServicioResult;
 import com.servify.solicitudes.application.dto.CalificarServicioCommand;
 import com.servify.solicitudes.application.dto.CancelarSolicitudServicioCommand;
@@ -19,6 +20,7 @@ import com.servify.solicitudes.application.dto.SolicitudRecibidaResult;
 import com.servify.solicitudes.application.dto.SolicitudServicioResult;
 import com.servify.solicitudes.application.dto.TipoDecisionSolicitud;
 import com.servify.solicitudes.application.dto.TipoRespuestaDistribucion;
+import com.servify.solicitudes.application.port.in.ActualizarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
@@ -41,6 +43,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +53,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SolicitudesApiController {
 
     private final CrearSolicitudServicioUseCase crearSolicitudServicioUseCase;
+    private final ActualizarSolicitudServicioUseCase actualizarSolicitudServicioUseCase;
     private final ObtenerSolicitudServicioUseCase obtenerSolicitudServicioUseCase;
     private final ListarSolicitudesDelSolicitanteUseCase listarSolicitudesDelSolicitanteUseCase;
     private final ListarSolicitudesRecibidasDetalladasUseCase listarSolicitudesRecibidasDetalladasUseCase;
@@ -64,6 +68,7 @@ public class SolicitudesApiController {
 
     public SolicitudesApiController(
             CrearSolicitudServicioUseCase crearSolicitudServicioUseCase,
+            ActualizarSolicitudServicioUseCase actualizarSolicitudServicioUseCase,
             ObtenerSolicitudServicioUseCase obtenerSolicitudServicioUseCase,
             ListarSolicitudesDelSolicitanteUseCase listarSolicitudesDelSolicitanteUseCase,
             ListarSolicitudesRecibidasDetalladasUseCase listarSolicitudesRecibidasDetalladasUseCase,
@@ -77,6 +82,7 @@ public class SolicitudesApiController {
             ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase
     ) {
         this.crearSolicitudServicioUseCase = crearSolicitudServicioUseCase;
+        this.actualizarSolicitudServicioUseCase = actualizarSolicitudServicioUseCase;
         this.obtenerSolicitudServicioUseCase = obtenerSolicitudServicioUseCase;
         this.listarSolicitudesDelSolicitanteUseCase = listarSolicitudesDelSolicitanteUseCase;
         this.listarSolicitudesRecibidasDetalladasUseCase = listarSolicitudesRecibidasDetalladasUseCase;
@@ -115,6 +121,27 @@ public class SolicitudesApiController {
         return obtenerSolicitudServicioUseCase.obtenerPorId(solicitudId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/solicitudes/{solicitudId}")
+    public ResponseEntity<SolicitudServicioResult> actualizarSolicitud(
+            @PathVariable UUID solicitudId,
+            @RequestBody ActualizarSolicitudRequest request
+    ) {
+        Ubicacion ubicacion = MvpWebMapper.toUbicacion(request.ubicacion);
+        DisponibilidadHoraria disponibilidad = MvpWebMapper.toDisponibilidad(request.disponibilidadRequerida);
+        SolicitudServicioResult result = actualizarSolicitudServicioUseCase.actualizar(
+                new ActualizarSolicitudServicioCommand(
+                        solicitudId,
+                        request.solicitanteId,
+                        request.modalidadServicio,
+                        ubicacion,
+                        disponibilidad,
+                        request.descripcionNecesidad,
+                        request.precioReferencia
+                )
+        );
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/usuarios/{solicitanteId}/solicitudes")
@@ -225,7 +252,9 @@ public class SolicitudesApiController {
                         request.asignacionServicioId,
                         request.solicitanteId,
                         request.prestadorId,
-                        request.puntaje
+                        request.puntaje,
+                        request.calificadorId,
+                        request.rolCalificador
                 )
         );
         return ResponseEntity.created(URI.create("/api/v1/solicitudes/" + solicitudId + "/calificaciones")).build();
@@ -245,6 +274,15 @@ public class SolicitudesApiController {
     public static class CrearSolicitudRequest {
         public UUID solicitanteId;
         public UUID categoriaServicioId;
+        public ModalidadServicio modalidadServicio;
+        public MvpWebMapper.UbicacionPayload ubicacion;
+        public MvpWebMapper.DisponibilidadPayload disponibilidadRequerida;
+        public String descripcionNecesidad;
+        public BigDecimal precioReferencia;
+    }
+
+    public static class ActualizarSolicitudRequest {
+        public UUID solicitanteId;
         public ModalidadServicio modalidadServicio;
         public MvpWebMapper.UbicacionPayload ubicacion;
         public MvpWebMapper.DisponibilidadPayload disponibilidadRequerida;
@@ -284,6 +322,8 @@ public class SolicitudesApiController {
         public UUID asignacionServicioId;
         public UUID solicitanteId;
         public UUID prestadorId;
+        public UUID calificadorId;
+        public RolConfirmante rolCalificador;
         public Integer puntaje;
     }
 

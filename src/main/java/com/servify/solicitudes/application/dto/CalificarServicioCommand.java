@@ -1,5 +1,7 @@
 package com.servify.solicitudes.application.dto;
 
+import com.servify.solicitudes.domain.enumtype.RolConfirmante;
+
 import java.util.UUID;
 
 /**
@@ -19,6 +21,8 @@ public class CalificarServicioCommand {
     private UUID asignacionServicioId;
     private UUID solicitanteId;
     private UUID prestadorId;
+    private UUID calificadorId;
+    private RolConfirmante rolCalificador;
     private Integer puntaje;
 
     public CalificarServicioCommand() {
@@ -29,11 +33,23 @@ public class CalificarServicioCommand {
                                     UUID solicitanteId,
                                     UUID prestadorId,
                                     Integer puntaje) {
+        this(solicitudId, asignacionServicioId, solicitanteId, prestadorId, puntaje, solicitanteId, RolConfirmante.SOLICITANTE);
+    }
+
+    public CalificarServicioCommand(UUID solicitudId,
+                                    UUID asignacionServicioId,
+                                    UUID solicitanteId,
+                                    UUID prestadorId,
+                                    Integer puntaje,
+                                    UUID calificadorId,
+                                    RolConfirmante rolCalificador) {
         this.solicitudId = solicitudId;
         this.asignacionServicioId = asignacionServicioId;
         this.solicitanteId = solicitanteId;
         this.prestadorId = prestadorId;
         this.puntaje = puntaje;
+        this.calificadorId = calificadorId;
+        this.rolCalificador = rolCalificador;
     }
 
     public UUID getSolicitudId() {
@@ -52,7 +68,23 @@ public class CalificarServicioCommand {
         return prestadorId;
     }
 
+    public UUID getCalificadorId() {
+        return calificadorId;
+    }
+
+    public RolConfirmante getRolCalificador() {
+        return rolCalificador;
+    }
+
     public Integer getPuntaje() {
         return puntaje;
+    }
+
+    public UUID getCalificadorIdOrDefault() {
+        return calificadorId != null ? calificadorId : solicitanteId;
+    }
+
+    public RolConfirmante getRolCalificadorOrDefault() {
+        return rolCalificador != null ? rolCalificador : RolConfirmante.SOLICITANTE;
     }
 }

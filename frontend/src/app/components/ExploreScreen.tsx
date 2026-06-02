@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronRight, ArrowRight, Bell, RefreshCcw, X } from "lucide-react";
+import { Search, ChevronRight, ArrowRight, Bell, RefreshCcw, X, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import { motion } from "motion/react";
 import { servifyApi, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
 
@@ -26,16 +26,24 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
   const firstName = userName.split(" ")[0];
   const [remoteRequests, setRemoteRequests] = useState<ApiReceivedRequest[] | null>(null);
   const [ownRequests, setOwnRequests] = useState<ApiRequest[]>([]);
+  const [ownAssignmentStates, setOwnAssignmentStates] = useState<Record<string, Awaited<ReturnType<typeof servifyApi.getAssignmentState>> | null>>({});
   const [ownPublications, setOwnPublications] = useState<ApiPublication[]>([]);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState("");
+  const [actionLoading, setActionLoading] = useState("");
+  const [counterOfferFor, setCounterOfferFor] = useState<string | null>(null);
+  const [counterPrice, setCounterPrice] = useState("");
+  const [counterMessage, setCounterMessage] = useState("");
 
   useEffect(() => {
     let ignore = false;
     setActivityLoading(Boolean(user));
     setRemoteRequests(null);
     setOwnRequests([]);
+    setOwnAssignmentStates({});
     setOwnPublications([]);
+    setActivityError("");
 
     if (!user) {
       setActivityLoading(false);
@@ -49,10 +57,18 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
       servifyApi.listUserRequests(String(user.id)).catch(() => []),
       shouldLoadProviderData ? servifyApi.listUserPublications(String(user.id)).catch(() => []) : Promise.resolve([]),
     ])
-      .then(([received, requests, publications]) => {
+      .then(async ([received, requests, publications]) => {
+        if (ignore) return;
+        const assignmentEntries = await Promise.all(
+          (requests || []).map(async (request) => [
+            request.id,
+            await servifyApi.getAssignmentState(request.id).catch(() => null),
+          ] as const)
+        );
         if (ignore) return;
         setRemoteRequests(received || []);
         setOwnRequests(requests || []);
+        setOwnAssignmentStates(Object.fromEntries(assignmentEntries));
         setOwnPublications(publications || []);
       })
       .finally(() => {
@@ -68,9 +84,69 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
     ? categories.filter((c) => c.label.toLowerCase().includes(search.toLowerCase()))
     : categories;
   const activity = useMemo(
-    () => buildActivitySummary(remoteRequests ?? [], ownRequests, ownPublications),
-    [ownPublications, ownRequests, remoteRequests]
+    () => buildActivitySummary(remoteRequests ?? [], ownRequests, ownPublications, ownAssignmentStates),
+    [ownAssignmentStates, ownPublications, ownRequests, remoteRequests]
   );
+  const compatibleRequests = useMemo(
+    () => (remoteRequests ?? []).filter(isCompatibleReceived),
+    [remoteRequests]
+  );
+
+  const reloadReceivedRequests = async () => {
+    if (!user || !(user.role === "provider" || user.role === "both")) return;
+    const received = await servifyApi.listReceivedRequests(String(user.id)).catch(() => []);
+    setRemoteRequests(received || []);
+  };
+
+  const handleDistributionResponse = async (request: ApiReceivedRequest, tipoRespuesta: "ACEPTAR" | "RECHAZAR") => {
+    if (!user?.id || !request.distribucionSolicitudId) {
+      setActivityError("No se pudo identificar la solicitud compatible.");
+      return;
+    }
+    setActivityError("");
+    setActionLoading(`${request.distribucionSolicitudId}-${tipoRespuesta}`);
+    try {
+      await servifyApi.respondToDistribution({
+        distribucionSolicitudId: request.distribucionSolicitudId,
+        prestadorId: String(user.id),
+        tipoRespuesta,
+      });
+      await reloadReceivedRequests();
+    } catch (err) {
+      setActivityError(err instanceof Error ? err.message : "No se pudo responder la solicitud");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleCounterOffer = async (request: ApiReceivedRequest) => {
+    if (!user?.id || !request.distribucionSolicitudId) {
+      setActivityError("No se pudo identificar la solicitud compatible.");
+      return;
+    }
+    if (!counterPrice.trim()) {
+      setActivityError("Indica un importe para contraofertar.");
+      return;
+    }
+    setActivityError("");
+    setActionLoading(`${request.distribucionSolicitudId}-CONTRAOFERTA`);
+    try {
+      await servifyApi.createCounterOffer({
+        distribucionSolicitudId: request.distribucionSolicitudId,
+        prestadorId: String(user.id),
+        precioPropuesto: counterPrice,
+        mensaje: counterMessage,
+      });
+      setCounterOfferFor(null);
+      setCounterPrice("");
+      setCounterMessage("");
+      await reloadReceivedRequests();
+    } catch (err) {
+      setActivityError(err instanceof Error ? err.message : "No se pudo emitir la contraoferta");
+    } finally {
+      setActionLoading("");
+    }
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#f8fafc" }}>
@@ -170,24 +246,103 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
         {(user?.role === "provider" || user?.role === "both") && remoteRequests && (
           <div className="mb-3">
             <p style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>Recomendados para vos</p>
+            {activityError ? (
+              <p className="rounded-2xl px-4 py-3 mb-2" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>
+                {activityError}
+              </p>
+            ) : null}
             <div className="flex flex-col gap-2.5">
-              {remoteRequests.length === 0 && <p style={{ color: "#64748b" }}>No hay solicitudes compatibles por ahora</p>}
-              {remoteRequests.map((r, i) => (
-                <motion.button
+              {compatibleRequests.length === 0 && <p style={{ color: "#64748b" }}>No hay solicitudes compatibles por ahora</p>}
+              {compatibleRequests.map((r, i) => (
+                <motion.div
                   key={r.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: i * 0.05 }}
-                  onClick={() => onCategoryPress(r.descripcionNecesidad ?? "")}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-white text-left transition-all active:scale-[0.98]"
+                  className="p-4 rounded-2xl bg-white text-left transition-all"
                   style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
                 >
-                  <div className="flex-1">
-                    <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{(r.descripcionNecesidad || "Solicitud de servicio").split('.')[0]}</p>
-                    <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>{r.descripcionNecesidad}</p>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1">
+                      <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{(r.descripcionNecesidad || "Solicitud de servicio").split('.')[0]}</p>
+                      <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>{r.descripcionNecesidad}</p>
+                      <p style={{ fontSize: 11, color: "#64748b", marginTop: 6, fontWeight: 700 }}>
+                        {(r.ubicacion?.localidad || r.ubicacion?.ciudad || "CABA")} - {statusLabel(r)}
+                      </p>
+                    </div>
+                    <ChevronRight size={18} color="#cbd5e1" strokeWidth={2} />
                   </div>
-                  <ChevronRight size={18} color="#cbd5e1" strokeWidth={2} />
-                </motion.button>
+
+                  {canRespondReceived(r) ? (
+                    <div className="mt-3 pt-3" style={{ borderTop: "1px solid #f1f5f9" }}>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          disabled={Boolean(actionLoading)}
+                          onClick={() => handleDistributionResponse(r, "ACEPTAR")}
+                          className="flex items-center justify-center gap-1 py-2.5 rounded-xl transition-all active:scale-95"
+                          style={{ background: "#f0fdf4", color: "#16a34a", border: "1.5px solid #bbf7d0", fontSize: 12, fontWeight: 800 }}
+                        >
+                          <CheckCircle size={14} strokeWidth={2} />
+                          Aceptar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(actionLoading)}
+                          onClick={() => handleDistributionResponse(r, "RECHAZAR")}
+                          className="flex items-center justify-center gap-1 py-2.5 rounded-xl transition-all active:scale-95"
+                          style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontSize: 12, fontWeight: 800 }}
+                        >
+                          <XCircle size={14} strokeWidth={2} />
+                          Rechazar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(actionLoading)}
+                          onClick={() => {
+                            setCounterOfferFor(counterOfferFor === r.distribucionSolicitudId ? null : r.distribucionSolicitudId ?? null);
+                            setCounterPrice("");
+                            setCounterMessage("");
+                          }}
+                          className="flex items-center justify-center gap-1 py-2.5 rounded-xl transition-all active:scale-95"
+                          style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
+                        >
+                          <MessageSquare size={14} strokeWidth={2} />
+                          Ofertar
+                        </button>
+                      </div>
+                      {counterOfferFor === r.distribucionSolicitudId ? (
+                        <div className="mt-3 flex flex-col gap-2 rounded-2xl p-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <input
+                            value={counterPrice}
+                            onChange={(event) => setCounterPrice(event.target.value)}
+                            type="number"
+                            placeholder="Importe propuesto"
+                            className="w-full rounded-xl px-3 py-2 outline-none"
+                            style={{ border: "1px solid #dbeafe", fontSize: 13, color: "#0f172a" }}
+                          />
+                          <textarea
+                            value={counterMessage}
+                            onChange={(event) => setCounterMessage(event.target.value)}
+                            rows={2}
+                            placeholder="Mensaje opcional"
+                            className="w-full rounded-xl px-3 py-2 outline-none resize-none"
+                            style={{ border: "1px solid #dbeafe", fontSize: 13, color: "#0f172a" }}
+                          />
+                          <button
+                            type="button"
+                            disabled={Boolean(actionLoading)}
+                            onClick={() => handleCounterOffer(r)}
+                            className="w-full py-2.5 rounded-xl transition-all active:scale-95"
+                            style={{ background: "#2563eb", color: "white", fontSize: 13, fontWeight: 800 }}
+                          >
+                            {actionLoading.endsWith("CONTRAOFERTA") ? "Enviando..." : "Enviar contraoferta"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </motion.div>
               ))}
             </div>
           </div>
@@ -286,13 +441,17 @@ interface ActivityItem {
 function buildActivitySummary(
   receivedRequests: ApiReceivedRequest[],
   ownRequests: ApiRequest[],
-  ownPublications: ApiPublication[]
+  ownPublications: ApiPublication[],
+  ownAssignmentStates: Record<string, Awaited<ReturnType<typeof servifyApi.getAssignmentState>> | null>
 ): { badgeCount: number; items: ActivityItem[] } {
   const pendingReceived = receivedRequests.filter((request) =>
-    ["ENVIADA", "CONTRAOFERTADA"].includes((request.estadoDistribucion ?? request.estado ?? "").toUpperCase())
+    (request.estadoDistribucion ?? request.estado ?? "").toUpperCase() === "ENVIADA"
   );
   const activeOwnRequests = ownRequests.filter((request) =>
     ["BUSCANDO_PRESTADOR", "ASIGNADA"].includes((request.estado ?? "").toUpperCase())
+  );
+  const ownCounterOffers = ownRequests.filter((request) =>
+    (ownAssignmentStates[request.id]?.contraofertasPendientes?.length ?? 0) > 0
   );
   const pausedPublications = ownPublications.filter((publication) =>
     ["PAUSADA", "INACTIVA"].includes((publication.estado ?? "").toUpperCase())
@@ -306,6 +465,13 @@ function buildActivitySummary(
     items.push({
       title: `${pendingReceived.length} solicitud${pendingReceived.length === 1 ? "" : "es"} para revisar`,
       detail: "Tenes pedidos compatibles esperando respuesta.",
+      tone: "urgent",
+    });
+  }
+  if (ownCounterOffers.length > 0) {
+    items.push({
+      title: `${ownCounterOffers.length} contraoferta${ownCounterOffers.length === 1 ? "" : "s"} pendiente${ownCounterOffers.length === 1 ? "" : "s"}`,
+      detail: "Revisala desde Solicitudes para aceptar o rechazar.",
       tone: "urgent",
     });
   }
@@ -334,9 +500,28 @@ function buildActivitySummary(
   }
 
   return {
-    badgeCount: pendingReceived.length + activeOwnRequests.length,
+    badgeCount: pendingReceived.length + ownCounterOffers.length,
     items,
   };
+}
+
+function canRespondReceived(request: ApiReceivedRequest): boolean {
+  return Boolean(request.distribucionSolicitudId)
+    && (request.estadoDistribucion ?? request.estado ?? "").toUpperCase() === "ENVIADA";
+}
+
+function isCompatibleReceived(request: ApiReceivedRequest): boolean {
+  const status = (request.estadoDistribucion ?? request.estado ?? "").toUpperCase();
+  return status === "ENVIADA";
+}
+
+function statusLabel(request: ApiReceivedRequest): string {
+  const status = (request.estadoDistribucion ?? request.estado ?? "ENVIADA").toUpperCase();
+  if (status === "ACEPTADA") return "Aceptada";
+  if (status === "RECHAZADA") return "Rechazada";
+  if (status === "CONTRAOFERTADA") return "Contraofertada";
+  if (status === "EXPIRADA") return "Expirada";
+  return "Pendiente";
 }
 
 function ActivityRow({ title, detail, tone }: ActivityItem) {

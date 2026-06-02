@@ -59,6 +59,7 @@ import com.servify.publicaciones.application.service.ObtenerPublicacionService;
 import com.servify.publicaciones.domain.service.PoliticaCompatibilidadPublicacion;
 import com.servify.publicaciones.domain.service.ValidadorDisponibilidadHoraria;
 import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
+import com.servify.solicitudes.application.port.in.ActualizarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarFinalizacionServicioUseCase;
@@ -80,6 +81,7 @@ import com.servify.solicitudes.application.port.out.DistribucionSolicitudReposit
 import com.servify.solicitudes.application.port.out.PublicacionesCompatiblesPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
 import com.servify.solicitudes.application.service.CalificarServicioService;
+import com.servify.solicitudes.application.service.ActualizarSolicitudServicioService;
 import com.servify.solicitudes.application.service.CancelarSolicitudServicioService;
 import com.servify.solicitudes.application.service.ConfirmarAsignacionSolicitudService;
 import com.servify.solicitudes.application.service.ConfirmarFinalizacionServicioService;
@@ -398,6 +400,13 @@ public class MvpUseCaseConfiguration {
     }
 
     @Bean
+    ActualizarSolicitudServicioUseCase actualizarSolicitudServicioUseCase(
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
+    ) {
+        return new ActualizarSolicitudServicioService(solicitudServicioRepositoryPort);
+    }
+
+    @Bean
     ListarSolicitudesDelSolicitanteUseCase listarSolicitudesDelSolicitanteUseCase(
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
     ) {
@@ -520,13 +529,15 @@ public class MvpUseCaseConfiguration {
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
-            ContraofertaRepositoryPort contraofertaRepositoryPort
+            ContraofertaRepositoryPort contraofertaRepositoryPort,
+            ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort
     ) {
         return new ObtenerEstadoAsignacionSolicitudService(
                 solicitudServicioRepositoryPort,
                 distribucionSolicitudRepositoryPort,
                 asignacionServicioRepositoryPort,
-                contraofertaRepositoryPort
+                contraofertaRepositoryPort,
+                confirmacionFinalizacionRepositoryPort
         );
     }
 

@@ -22,6 +22,7 @@ public class PublicacionServicioResult {
     private String descripcion;
     private ModalidadServicio modalidadServicio;
     private Ubicacion ubicacion;
+    private List<Ubicacion> zonasCobertura;
     private List<DisponibilidadHoraria> disponibilidadesHorarias;
     private BigDecimal precioBase;
     private EstadoPublicacion estado;
@@ -58,6 +59,10 @@ public class PublicacionServicioResult {
 
     public Ubicacion getUbicacion() {
         return ubicacion;
+    }
+
+    public List<Ubicacion> getZonasCobertura() {
+        return zonasCobertura;
     }
 
     public List<DisponibilidadHoraria> getDisponibilidadesHorarias() {
@@ -128,6 +133,11 @@ public class PublicacionServicioResult {
 
         public Builder ubicacion(Ubicacion ubicacion) {
             instance.ubicacion = ubicacion;
+            return this;
+        }
+
+        public Builder zonasCobertura(List<Ubicacion> zonasCobertura) {
+            instance.zonasCobertura = zonasCobertura;
             return this;
         }
 

@@ -19,6 +19,7 @@ public class CrearPublicacionCommand {
     private String descripcion;
     private ModalidadServicio modalidadServicio;
     private Ubicacion ubicacion;
+    private List<Ubicacion> zonasCobertura;
     private List<DisponibilidadHoraria> disponibilidadesHorarias;
     private BigDecimal precioBase;
 
@@ -33,12 +34,35 @@ public class CrearPublicacionCommand {
                                    Ubicacion ubicacion,
                                    List<DisponibilidadHoraria> disponibilidadesHorarias,
                                    BigDecimal precioBase) {
+        this(
+                usuarioId,
+                categoriaServicioId,
+                titulo,
+                descripcion,
+                modalidadServicio,
+                ubicacion,
+                ubicacion == null ? List.of() : List.of(ubicacion),
+                disponibilidadesHorarias,
+                precioBase
+        );
+    }
+
+    public CrearPublicacionCommand(UUID usuarioId,
+                                   UUID categoriaServicioId,
+                                   String titulo,
+                                   String descripcion,
+                                   ModalidadServicio modalidadServicio,
+                                   Ubicacion ubicacion,
+                                   List<Ubicacion> zonasCobertura,
+                                   List<DisponibilidadHoraria> disponibilidadesHorarias,
+                                   BigDecimal precioBase) {
         this.usuarioId = usuarioId;
         this.categoriaServicioId = categoriaServicioId;
         this.titulo = titulo;
         this.descripcion = descripcion;
         this.modalidadServicio = modalidadServicio;
         this.ubicacion = ubicacion;
+        this.zonasCobertura = zonasCobertura;
         this.disponibilidadesHorarias = disponibilidadesHorarias;
         this.precioBase = precioBase;
     }
@@ -65,6 +89,10 @@ public class CrearPublicacionCommand {
 
     public Ubicacion getUbicacion() {
         return ubicacion;
+    }
+
+    public List<Ubicacion> getZonasCobertura() {
+        return zonasCobertura;
     }
 
     public List<DisponibilidadHoraria> getDisponibilidadesHorarias() {

@@ -5,7 +5,7 @@ import { AuthScreen } from "./components/AuthScreen";
 import { ExploreScreen } from "./components/ExploreScreen";
 import { CategoryPublicationsScreen } from "./components/CategoryPublicationsScreen";
 import { RequestsScreen, type ServiceRequest } from "./components/RequestsScreen";
-import { RequestDetail } from "./components/RequestDetail";
+import { RequestDetail, type RatingTarget } from "./components/RequestDetail";
 import { PublishScreen } from "./components/PublishScreen";
 import { MyPublications } from "./components/MyPublications";
 import { ProfileScreen } from "./components/ProfileScreen";
@@ -35,7 +35,7 @@ export default function App() {
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [showRating, setShowRating] = useState(false);
-  const [ratingTarget, setRatingTarget] = useState("");
+  const [ratingTarget, setRatingTarget] = useState<RatingTarget | null>(null);
   const [showNewRequest, setShowNewRequest] = useState(false);
 
   const showNav =
@@ -78,8 +78,8 @@ export default function App() {
     setScreen("request-detail");
   };
 
-  const handleRate = (name: string) => {
-    setRatingTarget(name);
+  const handleRate = (target: RatingTarget) => {
+    setRatingTarget(target);
     setShowRating(true);
   };
 
@@ -218,10 +218,19 @@ export default function App() {
           {showRating && (
             <div className="absolute inset-0 z-50">
               <RatingModal
-                providerName={ratingTarget}
+                providerName={ratingTarget?.name ?? "Usuario"}
                 onClose={() => setShowRating(false)}
-                onSubmit={(rating, comment) => {
-                  setShowRating(false);
+                onSubmit={async (rating) => {
+                  if (!ratingTarget) return;
+                  await servifyApi.rateService({
+                    solicitudId: ratingTarget.solicitudId,
+                    asignacionServicioId: ratingTarget.asignacionServicioId,
+                    solicitanteId: ratingTarget.solicitanteId,
+                    prestadorId: ratingTarget.prestadorId,
+                    calificadorId: ratingTarget.calificadorId,
+                    rolCalificador: ratingTarget.rolCalificador,
+                    puntaje: rating,
+                  });
                 }}
               />
             </div>

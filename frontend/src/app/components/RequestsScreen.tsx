@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { Plus, MapPin, Users, DollarSign, Clock } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Plus, MapPin, Users, DollarSign, Clock, CheckCircle, XCircle, MessageSquare, Edit2, Trash2, Ban, X, Save } from "lucide-react";
 import { motion } from "motion/react";
-import { WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiRequest } from "../api";
+import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiCategory, type ApiReceivedRequest, type ApiRequest, type ApiUserProfile } from "../api";
 
-type RequestTab = "my-requests" | "my-proposals" | "explore";
+type RequestTab = "my-requests" | "my-proposals";
+type AssignmentState = Awaited<ReturnType<typeof servifyApi.getAssignmentState>>;
 
 export interface ServiceRequest {
   id: number | string;
@@ -16,11 +17,28 @@ export interface ServiceRequest {
   price: string;
   schedule: string;
   date: string;
-  status: "open" | "completed" | "cancelled" | "in-progress";
+  status: "open" | "completed" | "cancelled" | "in-progress" | "counter-offer";
   requesterName: string;
   requesterInitials: string;
   modal: "Presencial" | "Virtual" | "Ambas";
+  locality?: string;
+  availabilityDay?: string;
+  availabilityFrom?: string;
+  availabilityTo?: string;
+  distributionId?: string;
+  providerId?: string;
+  rawStatus?: string;
 }
+
+type EditRequestForm = {
+  description: string;
+  modal: "Presencial" | "Virtual" | "Ambas";
+  locality: string;
+  price: string;
+  availabilityDay: string;
+  availabilityFrom: string;
+  availabilityTo: string;
+};
 
 // Demo placeholders removed to avoid showing fake proposals to external users.
 
@@ -29,6 +47,7 @@ const statusConfig = {
   completed: { label: "Completada", bg: "#f0fdf4", color: "#16a34a" },
   cancelled: { label: "Cancelada", bg: "#fef2f2", color: "#ef4444" },
   "in-progress": { label: "En curso", bg: "#fffbeb", color: "#d97706" },
+  "counter-offer": { label: "Contraoferta", bg: "#fff7ed", color: "#ea580c" },
 };
 
 interface RequestsScreenProps {
@@ -41,38 +60,179 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
   const [tab, setTab] = useState<RequestTab>("my-requests");
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
   const [apiReceived, setApiReceived] = useState<ServiceRequest[]>([]);
+  const [actionLoading, setActionLoading] = useState("");
+  const [counterOfferFor, setCounterOfferFor] = useState<string | null>(null);
+  const [counterPrice, setCounterPrice] = useState("");
+  const [counterMessage, setCounterMessage] = useState("");
+  const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
+  const [editForm, setEditForm] = useState<EditRequestForm>(() => emptyEditForm());
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadRequests = useCallback(() => {
     if (!userId) return;
-    let ignore = false;
     setError("");
 
-    Promise.all([
+    return Promise.all([
       servifyApi.listUserRequests(userId).catch(() => []),
       servifyApi.listReceivedRequests(userId).catch(() => []),
+      servifyApi.listCategories().catch(() => []),
     ])
-      .then(([own, received]) => {
-        if (ignore) return;
-        setApiRequests(own.map((req) => mapRequest(req, "SOLICITANTE")));
-        setApiReceived(received.map((req) => mapRequest(req, "PRESTADOR")));
+      .then(async ([own, received, categories]) => {
+        const categoryMap = buildCategoryMap(categories);
+        const requesterMap = await buildRequesterMap(own, received);
+        const ownMapped = await Promise.all(
+          own.map(async (req) => {
+            const mapped = mapRequest(req, "SOLICITANTE", categoryMap, requesterMap);
+            const state = await servifyApi.getAssignmentState(req.id).catch(() => null);
+            return applyAssignmentState(mapped, state);
+          })
+        );
+        const receivedMapped = await Promise.all(
+          received.map(async (req) => {
+            const mapped = mapRequest(req, "PRESTADOR", categoryMap, requesterMap);
+            const state = await servifyApi.getAssignmentState(req.id).catch(() => null);
+            return applyAssignmentState(mapped, state);
+          })
+        );
+        setApiRequests(ownMapped);
+        setApiReceived(receivedMapped);
       })
       .catch((err) => {
-        if (!ignore) setError(err instanceof Error ? err.message : "No se pudieron cargar las solicitudes");
+        setError(err instanceof Error ? err.message : "No se pudieron cargar las solicitudes");
       });
-
-    return () => {
-      ignore = true;
-    };
   }, [userId]);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
 
   const tabs: { id: RequestTab; label: string }[] = [
     { id: "my-requests", label: "Mis pedidos" },
     { id: "my-proposals", label: "Mis propuestas" },
-    { id: "explore", label: "Explorar" },
   ];
 
-  const data = tab === "my-requests" ? apiRequests : tab === "my-proposals" ? apiReceived : [];
+  const data = tab === "my-requests" ? apiRequests : apiReceived;
+
+  const handleDistributionResponse = async (req: ServiceRequest, tipoRespuesta: "ACEPTAR" | "RECHAZAR") => {
+    if (!userId || !req.distributionId) {
+      setError("No se pudo identificar la distribucion recibida.");
+      return;
+    }
+    setError("");
+    setActionLoading(`${req.distributionId}-${tipoRespuesta}`);
+    try {
+      await servifyApi.respondToDistribution({
+        distribucionSolicitudId: req.distributionId,
+        prestadorId: userId,
+        tipoRespuesta,
+      });
+      await loadRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo responder la solicitud");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleCounterOffer = async (req: ServiceRequest) => {
+    if (!userId || !req.distributionId) {
+      setError("No se pudo identificar la distribucion recibida.");
+      return;
+    }
+    if (!counterPrice.trim()) {
+      setError("Indica un importe para contraofertar.");
+      return;
+    }
+    setError("");
+    setActionLoading(`${req.distributionId}-CONTRAOFERTA`);
+    try {
+      await servifyApi.createCounterOffer({
+        distribucionSolicitudId: req.distributionId,
+        prestadorId: userId,
+        precioPropuesto: counterPrice,
+        mensaje: counterMessage,
+      });
+      setCounterOfferFor(null);
+      setCounterPrice("");
+      setCounterMessage("");
+      await loadRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo emitir la contraoferta");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const openEditRequest = (req: ServiceRequest) => {
+    setEditingRequest(req);
+    setEditForm({
+      description: req.description,
+      modal: req.modal,
+      locality: req.locality ?? req.location ?? LOCATION_OPTIONS[0],
+      price: req.price === "A convenir" ? "" : req.price,
+      availabilityDay: req.availabilityDay ?? WEEK_DAYS[0].value,
+      availabilityFrom: req.availabilityFrom ?? "09:00",
+      availabilityTo: req.availabilityTo ?? "18:00",
+    });
+    setError("");
+  };
+
+  const handleUpdateRequest = async () => {
+    if (!userId || !editingRequest) return;
+    if (!editForm.description.trim()) {
+      setError("La descripcion no puede estar vacia.");
+      return;
+    }
+
+    setError("");
+    setActionLoading(`${editingRequest.id}-EDIT`);
+    try {
+      await servifyApi.updateServiceRequest({
+        solicitudId: String(editingRequest.id),
+        solicitanteId: userId,
+        descripcion: editForm.description,
+        modalidad: editForm.modal,
+        localidad: editForm.locality,
+        precio: editForm.price,
+        disponibilidadDia: editForm.availabilityDay,
+        horaDesde: editForm.availabilityFrom,
+        horaHasta: editForm.availabilityTo,
+      });
+      setEditingRequest(null);
+      await loadRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo editar la solicitud");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleCancelRequest = async (req: ServiceRequest, removeFromList: boolean) => {
+    if (!userId) {
+      setError("No se pudo identificar el usuario actual.");
+      return;
+    }
+    const message = removeFromList
+      ? "Eliminar esta solicitud la cancela en el backend y la quita de esta lista."
+      : "Cancelar esta solicitud la marca como cancelada en el backend.";
+    if (!window.confirm(message)) return;
+
+    setError("");
+    setActionLoading(`${req.id}-${removeFromList ? "DELETE" : "CANCEL"}`);
+    try {
+      if (removeFromList) {
+        await servifyApi.deleteRequest(String(req.id), userId);
+        setApiRequests((items) => items.filter((item) => item.id !== req.id));
+      } else {
+        await servifyApi.cancelRequest(String(req.id), userId);
+        await loadRequests();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la solicitud");
+    } finally {
+      setActionLoading("");
+    }
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#f8fafc" }}>
@@ -127,12 +287,14 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
         {data.map((req, i) => {
           const st = statusConfig[req.status];
           return (
-            <motion.button
+            <motion.div
               key={req.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.06 }}
               onClick={() => onRequestPress(req)}
+              role="button"
+              tabIndex={0}
               className="bg-white rounded-2xl p-4 text-left w-full transition-all active:scale-[0.98]"
               style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
             >
@@ -179,33 +341,158 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                   <span style={{ fontSize: 12, color: "#2563eb", fontWeight: 700 }}>{req.price}</span>
                 </div>
               </div>
-            </motion.button>
+
+              {canManageOwnRequest(req) ? (
+                <div className="mt-4 pt-3 grid grid-cols-3 gap-2" style={{ borderTop: "1px solid #f1f5f9" }} onClick={(event) => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    disabled={Boolean(actionLoading) || !canEditOwnRequest(req)}
+                    onClick={() => openEditRequest(req)}
+                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 12, fontWeight: 800, opacity: canEditOwnRequest(req) ? 1 : 0.55 }}
+                  >
+                    <Edit2 size={14} strokeWidth={2} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(actionLoading)}
+                    onClick={() => handleCancelRequest(req, false)}
+                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
+                  >
+                    <Ban size={14} strokeWidth={2} />
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(actionLoading)}
+                    onClick={() => handleCancelRequest(req, true)}
+                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontSize: 12, fontWeight: 800 }}
+                  >
+                    <Trash2 size={14} strokeWidth={2} />
+                    Eliminar
+                  </button>
+                </div>
+              ) : null}
+
+              {canProviderRespond(req) ? (
+                <div className="mt-4 pt-3" style={{ borderTop: "1px solid #f1f5f9" }} onClick={(event) => event.stopPropagation()}>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(actionLoading)}
+                      onClick={() => handleDistributionResponse(req, "ACEPTAR")}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      style={{ background: "#f0fdf4", color: "#16a34a", border: "1.5px solid #bbf7d0", fontSize: 12, fontWeight: 800 }}
+                    >
+                      <CheckCircle size={14} strokeWidth={2} />
+                      Aceptar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(actionLoading)}
+                      onClick={() => handleDistributionResponse(req, "RECHAZAR")}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontSize: 12, fontWeight: 800 }}
+                    >
+                      <XCircle size={14} strokeWidth={2} />
+                      Rechazar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(actionLoading)}
+                      onClick={() => {
+                        setCounterOfferFor(counterOfferFor === req.distributionId ? null : req.distributionId ?? null);
+                        setCounterPrice("");
+                        setCounterMessage("");
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
+                    >
+                      <MessageSquare size={14} strokeWidth={2} />
+                      Ofertar
+                    </button>
+                  </div>
+
+                  {counterOfferFor === req.distributionId ? (
+                    <div className="mt-3 flex flex-col gap-2 rounded-2xl p-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      <input
+                        value={counterPrice}
+                        onChange={(event) => setCounterPrice(event.target.value)}
+                        type="number"
+                        placeholder="Importe propuesto"
+                        className="w-full rounded-xl px-3 py-2 outline-none"
+                        style={{ border: "1px solid #dbeafe", fontSize: 13, color: "#0f172a" }}
+                      />
+                      <textarea
+                        value={counterMessage}
+                        onChange={(event) => setCounterMessage(event.target.value)}
+                        rows={2}
+                        placeholder="Mensaje opcional"
+                        className="w-full rounded-xl px-3 py-2 outline-none resize-none"
+                        style={{ border: "1px solid #dbeafe", fontSize: 13, color: "#0f172a" }}
+                      />
+                      <button
+                        type="button"
+                        disabled={Boolean(actionLoading)}
+                        onClick={() => handleCounterOffer(req)}
+                        className="w-full py-2.5 rounded-xl transition-all active:scale-95"
+                        style={{ background: "#2563eb", color: "white", fontSize: 13, fontWeight: 800 }}
+                      >
+                        {actionLoading.endsWith("CONTRAOFERTA") ? "Enviando..." : "Enviar contraoferta"}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </motion.div>
           );
         })}
       </div>
+
+      {editingRequest ? (
+        <EditRequestSheet
+          form={editForm}
+          loading={actionLoading.endsWith("EDIT")}
+          onChange={setEditForm}
+          onClose={() => setEditingRequest(null)}
+          onSave={handleUpdateRequest}
+        />
+      ) : null}
     </div>
   );
 }
 
-function mapRequest(req: ApiRequest, viewerRole: "SOLICITANTE" | "PRESTADOR" | null): ServiceRequest {
+function mapRequest(
+  req: ApiRequest | ApiReceivedRequest,
+  viewerRole: "SOLICITANTE" | "PRESTADOR" | null,
+  categoryMap: Map<string, string>,
+  requesterMap: Map<string, string>
+): ServiceRequest {
   const description = req.descripcionNecesidad ?? "Solicitud de servicio";
   const title = description.split(".")[0] || "Solicitud de servicio";
   const locality = req.ubicacion?.localidad || req.ubicacion?.ciudad || "CABA";
   const requesterId = req.solicitanteId || "";
-  const requesterName = requesterId ? `Usuario ${requesterId.slice(0, 6)}` : "Solicitante";
+  const requesterName = requesterId ? requesterMap.get(requesterId) ?? `Usuario ${requesterId.slice(0, 6)}` : "Solicitante";
   const date = req.fechaSolicitud ?? req.createdAt;
+  const received = req as ApiReceivedRequest;
+  const rawStatus = received.estadoDistribucion ?? req.estado;
   return {
     id: req.id,
     viewerRole,
     title,
     description,
-    category: req.categoriaServicioId ? `Categoría ${req.categoriaServicioId.slice(0, 6)}` : "Sin categoría",
+    category: req.categoriaServicioId
+      ? categoryMap.get(req.categoriaServicioId) ?? `Categoría ${req.categoriaServicioId.slice(0, 6)}`
+      : "Sin categoría",
     location: locality,
     proposals: 0,
     price: formatMoney(req.precioReferencia),
     schedule: formatAvailability(req),
     date: date ? new Date(date).toLocaleDateString("es-AR") : "Sin fecha",
-    status: toUiStatus(req.estado),
+    status: toUiStatus(rawStatus),
     requesterName,
     requesterInitials: requesterName
       .split(" ")
@@ -214,6 +501,13 @@ function mapRequest(req: ApiRequest, viewerRole: "SOLICITANTE" | "PRESTADOR" | n
       .slice(0, 2)
       .toUpperCase(),
     modal: fromApiModality(req.modalidadServicio),
+    locality,
+    availabilityDay: req.disponibilidadRequerida?.diaSemana,
+    availabilityFrom: req.disponibilidadRequerida?.horaDesde?.slice(0, 5),
+    availabilityTo: req.disponibilidadRequerida?.horaHasta?.slice(0, 5),
+    distributionId: received.distribucionSolicitudId,
+    providerId: received.prestadorId,
+    rawStatus,
   };
 }
 
@@ -227,14 +521,217 @@ function formatAvailability(req: ApiRequest): string {
 function toUiStatus(status?: string): ServiceRequest["status"] {
   if (status === "CANCELADA" || status === "RECHAZADA" || status === "EXPIRADA") return "cancelled";
   if (status === "FINALIZADA") return "completed";
+  if (status === "CONTRAOFERTADA") return "counter-offer";
   if (
     status === "ASIGNADA" ||
     status === "EN_CURSO" ||
     status === "ACEPTADA" ||
-    status === "CONTRAOFERTADA" ||
     status === "CERRADA"
   ) return "in-progress";
   return "open";
+}
+
+function applyAssignmentState(req: ServiceRequest, state: AssignmentState | null): ServiceRequest {
+  if (!state) return req;
+
+  const acceptedCount = state.distribucionesAceptadas?.length ?? 0;
+  const counterOfferCount = state.contraofertasPendientes?.length ?? 0;
+  const activeCount = state.distribucionesActivas ?? 0;
+  const proposals = Math.max(req.proposals, acceptedCount, counterOfferCount, activeCount);
+  const nextRawStatus =
+    state.asignacion?.estado ??
+    state.distribucionesAceptadas?.[0]?.estado ??
+    (counterOfferCount > 0 ? "CONTRAOFERTADA" : undefined) ??
+    state.estadoSolicitud ??
+    req.rawStatus;
+
+  if (state.finalizacionConfirmada || state.estadoSolicitud === "FINALIZADA" || state.asignacion?.estado === "FINALIZADA") {
+    return { ...req, proposals, rawStatus: nextRawStatus, status: "completed" };
+  }
+
+  if (state.asignacion || acceptedCount > 0 || state.estadoSolicitud === "ASIGNADA") {
+    return { ...req, proposals, rawStatus: nextRawStatus, status: "in-progress" };
+  }
+
+  if (counterOfferCount > 0) {
+    return { ...req, proposals, rawStatus: nextRawStatus, status: "counter-offer" };
+  }
+
+  return { ...req, proposals, rawStatus: nextRawStatus };
+}
+
+function canProviderRespond(req: ServiceRequest): boolean {
+  return req.viewerRole === "PRESTADOR"
+    && Boolean(req.distributionId)
+    && (req.rawStatus ?? "").toUpperCase() === "ENVIADA";
+}
+
+function canManageOwnRequest(req: ServiceRequest): boolean {
+  return req.viewerRole === "SOLICITANTE"
+    && !["completed", "cancelled"].includes(req.status);
+}
+
+function canEditOwnRequest(req: ServiceRequest): boolean {
+  return req.viewerRole === "SOLICITANTE" && req.status === "open";
+}
+
+function emptyEditForm(): EditRequestForm {
+  return {
+    description: "",
+    modal: "Presencial",
+    locality: LOCATION_OPTIONS[0],
+    price: "",
+    availabilityDay: WEEK_DAYS[0].value,
+    availabilityFrom: "09:00",
+    availabilityTo: "18:00",
+  };
+}
+
+function EditRequestSheet({
+  form,
+  loading,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  form: EditRequestForm;
+  loading: boolean;
+  onChange: (next: EditRequestForm) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const update = (patch: Partial<EditRequestForm>) => onChange({ ...form, ...patch });
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(15,23,42,0.35)" }} onClick={onClose}>
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 28, stiffness: 280 }}
+        className="w-full bg-white rounded-t-3xl max-h-[88%] flex flex-col"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-col items-center pt-3 pb-2 shrink-0">
+          <div className="rounded-full" style={{ width: 40, height: 4, background: "#e2e8f0" }} />
+        </div>
+        <div className="flex items-center justify-between px-6 pb-4 shrink-0">
+          <div>
+            <p style={{ fontSize: 19, fontWeight: 800, color: "#0f172a" }}>Editar solicitud</p>
+            <p style={{ fontSize: 13, color: "#64748b" }}>Ajusta los datos activos del pedido</p>
+          </div>
+          <button type="button" onClick={onClose}>
+            <X size={22} color="#94a3b8" strokeWidth={1.8} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-6 pb-8 flex flex-col gap-4">
+          <EditField label="Descripcion">
+            <textarea
+              value={form.description}
+              onChange={(event) => update({ description: event.target.value })}
+              rows={4}
+              className="w-full bg-transparent outline-none resize-none"
+              style={{ fontSize: 14, color: "#0f172a" }}
+            />
+          </EditField>
+
+          <EditField label="Modalidad">
+            <select
+              value={form.modal}
+              onChange={(event) => update({ modal: event.target.value as EditRequestForm["modal"] })}
+              className="w-full bg-transparent outline-none"
+              style={{ fontSize: 14, color: "#0f172a" }}
+            >
+              {["Presencial", "Virtual", "Ambas"].map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </EditField>
+
+          <EditField label="Localidad">
+            <select
+              value={form.locality}
+              onChange={(event) => update({ locality: event.target.value })}
+              className="w-full bg-transparent outline-none"
+              style={{ fontSize: 14, color: "#0f172a" }}
+            >
+              {LOCATION_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </EditField>
+
+          <EditField label="Disponibilidad">
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                value={form.availabilityDay}
+                onChange={(event) => update({ availabilityDay: event.target.value })}
+                className="bg-transparent outline-none min-w-0"
+                style={{ fontSize: 13, color: "#0f172a" }}
+              >
+                {WEEK_DAYS.map((day) => (
+                  <option key={day.value} value={day.value}>{day.label}</option>
+                ))}
+              </select>
+              <select
+                value={form.availabilityFrom}
+                onChange={(event) => update({ availabilityFrom: event.target.value })}
+                className="bg-transparent outline-none min-w-0"
+                style={{ fontSize: 13, color: "#0f172a" }}
+              >
+                {TIME_OPTIONS.map((time) => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
+              <select
+                value={form.availabilityTo}
+                onChange={(event) => update({ availabilityTo: event.target.value })}
+                className="bg-transparent outline-none min-w-0"
+                style={{ fontSize: 13, color: "#0f172a" }}
+              >
+                {TIME_OPTIONS.map((time) => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
+            </div>
+          </EditField>
+
+          <EditField label="Precio sugerido">
+            <input
+              value={form.price}
+              onChange={(event) => update({ price: event.target.value })}
+              placeholder="Opcional"
+              className="w-full bg-transparent outline-none"
+              style={{ fontSize: 14, color: "#0f172a" }}
+            />
+          </EditField>
+
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={loading}
+            className="w-full py-3.5 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2"
+            style={{ background: "#2563eb", color: "white", fontWeight: 800, fontSize: 15, opacity: loading ? 0.8 : 1 }}
+          >
+            <Save size={16} strokeWidth={2.2} />
+            {loading ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 8 }}>{label}</p>
+      <div className="px-4 py-3.5 rounded-2xl bg-white" style={{ border: "1.5px solid #e2e8f0" }}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
@@ -246,4 +743,39 @@ function Chip({ label, color, bg }: { label: string; color: string; bg: string }
       {label}
     </span>
   );
+}
+
+async function buildRequesterMap(
+  own: ApiRequest[],
+  received: ApiReceivedRequest[]
+): Promise<Map<string, string>> {
+  const ids = Array.from(
+    new Set(
+      [...own, ...received]
+        .map((req) => req.solicitanteId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const profiles = await Promise.all(
+    ids.map(async (id) => ({
+      id,
+      profile: await servifyApi.getUserProfile(id).catch(() => null),
+    }))
+  );
+  const map = new Map<string, string>();
+  profiles.forEach(({ id, profile }) => {
+    const name = formatProfileName(profile);
+    if (name) map.set(id, name);
+  });
+  return map;
+}
+
+function buildCategoryMap(categories: ApiCategory[]): Map<string, string> {
+  return new Map(categories.map((category) => [category.id, category.nombre]));
+}
+
+function formatProfileName(profile: ApiUserProfile | null): string {
+  if (!profile) return "";
+  const parts = [profile.nombre, profile.apellido].filter(Boolean);
+  return parts.join(" ").trim();
 }

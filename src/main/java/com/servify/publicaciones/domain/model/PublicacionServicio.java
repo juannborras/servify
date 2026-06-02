@@ -8,7 +8,9 @@ import com.servify.shared.domain.model.BaseEntity;
 import com.servify.shared.domain.valueobject.Ubicacion;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class PublicacionServicio extends BaseEntity {
@@ -19,6 +21,7 @@ public class PublicacionServicio extends BaseEntity {
     private String descripcion;
     private ModalidadServicio modalidadServicio;
     private Ubicacion ubicacion;
+    private List<Ubicacion> zonasCobertura;
     private List<DisponibilidadHoraria> disponibilidadesHorarias;
     private BigDecimal precioBase;
     private EstadoPublicacion estado;
@@ -36,6 +39,32 @@ public class PublicacionServicio extends BaseEntity {
                                List<DisponibilidadHoraria> disponibilidadesHorarias,
                                BigDecimal precioBase,
                                EstadoPublicacion estado) {
+        this(
+                id,
+                usuarioId,
+                categoriaServicio,
+                titulo,
+                descripcion,
+                modalidadServicio,
+                ubicacion,
+                ubicacion == null ? List.of() : List.of(ubicacion),
+                disponibilidadesHorarias,
+                precioBase,
+                estado
+        );
+    }
+
+    public PublicacionServicio(UUID id,
+                               UUID usuarioId,
+                               CategoriaServicio categoriaServicio,
+                               String titulo,
+                               String descripcion,
+                               ModalidadServicio modalidadServicio,
+                               Ubicacion ubicacion,
+                               List<Ubicacion> zonasCobertura,
+                               List<DisponibilidadHoraria> disponibilidadesHorarias,
+                               BigDecimal precioBase,
+                               EstadoPublicacion estado) {
         super(id);
         this.usuarioId = usuarioId;
         this.categoriaServicio = categoriaServicio;
@@ -43,6 +72,7 @@ public class PublicacionServicio extends BaseEntity {
         this.descripcion = descripcion;
         this.modalidadServicio = modalidadServicio;
         this.ubicacion = ubicacion;
+        this.zonasCobertura = normalizarZonasCobertura(ubicacion, zonasCobertura);
         this.disponibilidadesHorarias = disponibilidadesHorarias;
         this.precioBase = precioBase;
         this.estado = estado;
@@ -70,6 +100,18 @@ public class PublicacionServicio extends BaseEntity {
 
     public Ubicacion getUbicacion() {
         return ubicacion;
+    }
+
+    public List<Ubicacion> getZonasCobertura() {
+        return zonasCobertura == null ? List.of() : zonasCobertura;
+    }
+
+    public List<Ubicacion> getUbicacionesParaMatching() {
+        List<Ubicacion> zonas = getZonasCobertura();
+        if (!zonas.isEmpty()) {
+            return zonas;
+        }
+        return ubicacion == null ? List.of() : List.of(ubicacion);
     }
 
     public List<DisponibilidadHoraria> getDisponibilidadesHorarias() {
@@ -119,7 +161,7 @@ public class PublicacionServicio extends BaseEntity {
         }
         if ((ModalidadServicio.PRESENCIAL.equals(modalidadServicio) ||
                 ModalidadServicio.MIXTA.equals(modalidadServicio))
-                && (ubicacion == null || !ubicacion.esAptaParaBusquedaGeografica())) {
+                && getUbicacionesParaMatching().stream().noneMatch(Ubicacion::esAptaParaBusquedaGeografica)) {
             return false;
         }
         return true;
@@ -175,6 +217,20 @@ public class PublicacionServicio extends BaseEntity {
             }
         }
         this.ubicacion = ubicacion;
+        this.zonasCobertura = normalizarZonasCobertura(ubicacion, this.zonasCobertura);
+    }
+
+    public void actualizarZonasCobertura(List<Ubicacion> zonasCobertura) {
+        List<Ubicacion> normalizadas = normalizarZonasCobertura(this.ubicacion, zonasCobertura);
+        if ((ModalidadServicio.PRESENCIAL.equals(this.modalidadServicio) ||
+                ModalidadServicio.MIXTA.equals(this.modalidadServicio))
+                && normalizadas.stream().noneMatch(Ubicacion::esAptaParaBusquedaGeografica)) {
+            throw new IllegalArgumentException("Debe informar al menos una zona valida para modalidad presencial o mixta.");
+        }
+        this.zonasCobertura = normalizadas;
+        if ((this.ubicacion == null || !this.ubicacion.esAptaParaBusquedaGeografica()) && !normalizadas.isEmpty()) {
+            this.ubicacion = normalizadas.get(0);
+        }
     }
 
     // Actualiza disponibilidades validando que no haya superposiciones
@@ -250,5 +306,38 @@ public class PublicacionServicio extends BaseEntity {
             throw new IllegalStateException("La publicación ya se encuentra eliminada.");
         }
         this.estado = EstadoPublicacion.ELIMINADA;
+    }
+
+    private List<Ubicacion> normalizarZonasCobertura(Ubicacion ubicacionPrincipal, List<Ubicacion> zonas) {
+        Map<String, Ubicacion> unicas = new LinkedHashMap<>();
+        if (zonas != null) {
+            for (Ubicacion zona : zonas) {
+                agregarZona(unicas, zona);
+            }
+        }
+        if (unicas.isEmpty()) {
+            agregarZona(unicas, ubicacionPrincipal);
+        }
+        return List.copyOf(unicas.values());
+    }
+
+    private void agregarZona(Map<String, Ubicacion> destino, Ubicacion zona) {
+        if (zona == null) {
+            return;
+        }
+        destino.putIfAbsent(claveZona(zona), zona);
+    }
+
+    private String claveZona(Ubicacion zona) {
+        return normalizar(zona.getPais()) + "|" +
+                normalizar(zona.getProvincia()) + "|" +
+                normalizar(zona.getCiudad()) + "|" +
+                normalizar(zona.getLocalidad()) + "|" +
+                zona.getLatitud() + "|" +
+                zona.getLongitud();
+    }
+
+    private String normalizar(String valor) {
+        return valor == null ? "" : valor.trim().toLowerCase();
     }
 }

@@ -52,6 +52,7 @@ public class ListarPublicacionesDeUsuarioService implements ListarPublicacionesD
                 .descripcion(publicacionServicio.getDescripcion())
                 .modalidadServicio(publicacionServicio.getModalidadServicio())
                 .ubicacion(publicacionServicio.getUbicacion())
+                .zonasCobertura(publicacionServicio.getZonasCobertura())
                 .disponibilidadesHorarias(publicacionServicio.getDisponibilidadesHorarias())
                 .precioBase(publicacionServicio.getPrecioBase())
                 .estado(publicacionServicio.getEstado())

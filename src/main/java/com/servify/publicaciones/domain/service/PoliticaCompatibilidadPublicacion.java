@@ -76,16 +76,14 @@ public class PoliticaCompatibilidadPublicacion {
         if (ModalidadServicio.VIRTUAL.equals(publicacion.getModalidadServicio())) {
             return true;
         }
-        Ubicacion ubicacionPublicacion = publicacion.getUbicacion();
-        if (ubicacionPublicacion == null) {
-            return false;
-        }
-        // Compatibilidad por ciudad y provincia
-        boolean mismaCiudad = ubicacionPublicacion.getCiudad() != null
-                && ubicacionPublicacion.getCiudad().equalsIgnoreCase(ubicacionRequerida.getCiudad());
-        boolean mismaProvincia = ubicacionPublicacion.getProvincia() != null
-                && ubicacionPublicacion.getProvincia().equalsIgnoreCase(ubicacionRequerida.getProvincia());
-        return mismaCiudad && mismaProvincia;
+        return publicacion.getUbicacionesParaMatching().stream()
+                .anyMatch(ubicacionPublicacion -> {
+                    boolean mismaCiudad = ubicacionPublicacion.getCiudad() != null
+                            && ubicacionPublicacion.getCiudad().equalsIgnoreCase(ubicacionRequerida.getCiudad());
+                    boolean mismaProvincia = ubicacionPublicacion.getProvincia() != null
+                            && ubicacionPublicacion.getProvincia().equalsIgnoreCase(ubicacionRequerida.getProvincia());
+                    return mismaCiudad && mismaProvincia;
+                });
     }
 
     // Verifica si alguna disponibilidad de la publicación es compatible con la requerida

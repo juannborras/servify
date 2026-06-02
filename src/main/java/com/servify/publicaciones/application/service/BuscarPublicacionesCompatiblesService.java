@@ -41,9 +41,6 @@ public class BuscarPublicacionesCompatiblesService implements BuscarPublicacione
         List<PublicacionServicio> candidatas = obtenerCandidatas(query);
         return candidatas.stream()
                 .filter(p -> esCompatible(p, categoriaRequerida, query))
-                .filter(p -> !tienePrecioMaximo(query.getPrecioMaximo())
-                        || p.getPrecioBase() == null
-                        || p.getPrecioBase().compareTo(query.getPrecioMaximo()) <= 0)
                 .filter(p -> estaDentroDelRadio(p, query))
                 .map(p -> construirResultado(p, calcularDistanciaKm(p, query)))
                 .collect(Collectors.toList());
@@ -100,20 +97,16 @@ public class BuscarPublicacionesCompatiblesService implements BuscarPublicacione
                 || !query.getUbicacionRequerida().tieneCoordenadasValidas()) {
             return null;
         }
-        if (publicacionServicio.getUbicacion() == null
-                || !publicacionServicio.getUbicacion().tieneCoordenadasValidas()) {
-            return null;
-        }
-        return calcularHaversine(
-                query.getUbicacionRequerida().getLatitud(),
-                query.getUbicacionRequerida().getLongitud(),
-                publicacionServicio.getUbicacion().getLatitud(),
-                publicacionServicio.getUbicacion().getLongitud()
-        );
-    }
-
-    private boolean tienePrecioMaximo(BigDecimal precioMaximo) {
-        return precioMaximo != null && precioMaximo.compareTo(BigDecimal.ZERO) > 0;
+        return publicacionServicio.getUbicacionesParaMatching().stream()
+                .filter(ubicacion -> ubicacion != null && ubicacion.tieneCoordenadasValidas())
+                .map(ubicacion -> calcularHaversine(
+                        query.getUbicacionRequerida().getLatitud(),
+                        query.getUbicacionRequerida().getLongitud(),
+                        ubicacion.getLatitud(),
+                        ubicacion.getLongitud()
+                ))
+                .min(Double::compareTo)
+                .orElse(null);
     }
 
     private boolean estaDentroDelRadio(PublicacionServicio publicacionServicio,

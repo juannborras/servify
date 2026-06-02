@@ -12,7 +12,11 @@ public class EstadoAsignacionSolicitudResult {
     private EstadoSolicitud estadoSolicitud;
     private AsignacionServicioResult asignacion;
     private List<ContraofertaResult> contraofertasPendientes;
+    private List<DistribucionSolicitudResult> distribucionesAceptadas;
     private Integer distribucionesActivas;
+    private Boolean confirmadoPorSolicitante;
+    private Boolean confirmadoPorPrestador;
+    private Boolean finalizacionConfirmada;
 
     private EstadoAsignacionSolicitudResult() {
     }
@@ -37,8 +41,24 @@ public class EstadoAsignacionSolicitudResult {
         return contraofertasPendientes;
     }
 
+    public List<DistribucionSolicitudResult> getDistribucionesAceptadas() {
+        return distribucionesAceptadas;
+    }
+
     public Integer getDistribucionesActivas() {
         return distribucionesActivas;
+    }
+
+    public Boolean getConfirmadoPorSolicitante() {
+        return confirmadoPorSolicitante;
+    }
+
+    public Boolean getConfirmadoPorPrestador() {
+        return confirmadoPorPrestador;
+    }
+
+    public Boolean getFinalizacionConfirmada() {
+        return finalizacionConfirmada;
     }
 
     public static Builder builder() {
@@ -78,8 +98,28 @@ public class EstadoAsignacionSolicitudResult {
             return this;
         }
 
+        public Builder distribucionesAceptadas(List<DistribucionSolicitudResult> distribucionesAceptadas) {
+            instance.distribucionesAceptadas = distribucionesAceptadas;
+            return this;
+        }
+
         public Builder distribucionesActivas(Integer distribucionesActivas) {
             instance.distribucionesActivas = distribucionesActivas;
+            return this;
+        }
+
+        public Builder confirmadoPorSolicitante(Boolean confirmadoPorSolicitante) {
+            instance.confirmadoPorSolicitante = confirmadoPorSolicitante;
+            return this;
+        }
+
+        public Builder confirmadoPorPrestador(Boolean confirmadoPorPrestador) {
+            instance.confirmadoPorPrestador = confirmadoPorPrestador;
+            return this;
+        }
+
+        public Builder finalizacionConfirmada(Boolean finalizacionConfirmada) {
+            instance.finalizacionConfirmada = finalizacionConfirmada;
             return this;
         }
 

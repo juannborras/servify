@@ -110,7 +110,17 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const [availabilityTo, setAvailabilityTo] = useState("18:00");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const canAttemptRegister = Boolean(selectedRole && registerEmail && registerPass && registerPassConfirm);
+  const passwordRules = getPasswordRules(registerPass);
+  const passwordIsStrong = passwordRules.every((rule) => rule.valid);
+  const passwordConfirmationMatches = Boolean(registerPassConfirm && registerPass === registerPassConfirm);
+  const canAttemptRegister = Boolean(
+    selectedRole &&
+      registerEmail &&
+      registerPass &&
+      registerPassConfirm &&
+      passwordIsStrong &&
+      passwordConfirmationMatches
+  );
 
   const handleGoogleCredential = useCallback(
     async (idToken: string) => {
@@ -145,6 +155,10 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
 
   const handleRegister = async () => {
     if (!selectedRole || !registerEmail || !registerPass) return;
+    if (!passwordIsStrong) {
+      setError("La contrasena debe tener mayuscula, minuscula, numero y caracter especial.");
+      return;
+    }
     if (registerPass !== registerPassConfirm) {
       setError("Las contrasenas no coinciden");
       return;
@@ -356,6 +370,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
                   </button>
                 }
               />
+              <PasswordRules rules={passwordRules} />
               <InputField
                 icon={<Lock size={17} color="#94a3b8" strokeWidth={1.8} />}
                 placeholder="Confirmar contrasena"
@@ -372,6 +387,11 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
                   </button>
                 }
               />
+              {registerPassConfirm && !passwordConfirmationMatches ? (
+                <p style={{ color: "#dc2626", fontSize: 12, fontWeight: 700, marginTop: -8 }}>
+                  Las contrasenas no coinciden.
+                </p>
+              ) : null}
               <SelectField
                 icon={<MapPin size={17} color="#94a3b8" strokeWidth={1.8} />}
                 value={locality}
@@ -517,6 +537,38 @@ function AuthDivider() {
       <div className="h-px flex-1" style={{ background: "#e2e8f0" }} />
       <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 700 }}>o</span>
       <div className="h-px flex-1" style={{ background: "#e2e8f0" }} />
+    </div>
+  );
+}
+
+function getPasswordRules(password: string) {
+  return [
+    { label: "8 caracteres minimo", valid: password.length >= 8 },
+    { label: "Una mayuscula", valid: /[A-Z]/.test(password) },
+    { label: "Una minuscula", valid: /[a-z]/.test(password) },
+    { label: "Un numero", valid: /\d/.test(password) },
+    { label: "Un caracter especial", valid: /[^A-Za-z0-9]/.test(password) },
+  ];
+}
+
+function PasswordRules({ rules }: { rules: Array<{ label: string; valid: boolean }> }) {
+  return (
+    <div className="grid grid-cols-2 gap-2" style={{ marginTop: -6 }}>
+      {rules.map((rule) => (
+        <div
+          key={rule.label}
+          className="flex items-center gap-1.5 rounded-xl px-2 py-1.5"
+          style={{ background: rule.valid ? "#f0fdf4" : "#f8fafc", border: `1px solid ${rule.valid ? "#bbf7d0" : "#e2e8f0"}` }}
+        >
+          <span
+            className="rounded-full"
+            style={{ width: 7, height: 7, background: rule.valid ? "#16a34a" : "#cbd5e1", flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 11, fontWeight: 700, color: rule.valid ? "#15803d" : "#64748b" }}>
+            {rule.label}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

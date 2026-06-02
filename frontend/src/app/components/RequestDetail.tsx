@@ -11,16 +11,28 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  XCircle,
+  MessageSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { SessionUser } from "../api";
 import { formatMoney, servifyApi } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
 
+export interface RatingTarget {
+  name: string;
+  solicitudId: string;
+  asignacionServicioId: string;
+  solicitanteId: string;
+  prestadorId: string;
+  calificadorId: string;
+  rolCalificador: "SOLICITANTE" | "PRESTADOR";
+}
+
 interface RequestDetailProps {
   request: ServiceRequest;
   onBack: () => void;
-  onRate: (name: string) => void;
+  onRate: (target: RatingTarget) => void;
   currentUser?: SessionUser | null;
 }
 
@@ -79,7 +91,9 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   }, [request.id]);
 
   const assignment = assignmentState?.asignacion;
-  const providerId = assignment?.prestadorId ?? "";
+  const acceptedDistribution = assignmentState?.distribucionesAceptadas?.[0];
+  const pendingCounterOffer = assignmentState?.contraofertasPendientes?.[0];
+  const providerId = assignment?.prestadorId ?? acceptedDistribution?.prestadorId ?? pendingCounterOffer?.prestadorId ?? "";
   const providerName = providerId ? `Prestador ${providerId.slice(0, 6)}` : proposalData.providerName;
   const providerInitials = providerName
     .split(" ")
@@ -95,10 +109,96 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   const providerConfirmed = assignmentCompleted || (assignmentState?.confirmadoPorPrestador ?? false);
   const isCompleted = request.status === "completed" || assignmentCompleted || Boolean(assignmentState?.finalizacionConfirmada);
   const hasProposal = Boolean(assignment);
+  const hasAcceptedPending = !assignment && Boolean(acceptedDistribution?.id);
+  const hasPendingCounterOffer = !assignment && Boolean(pendingCounterOffer?.id);
   const confirmationRole = request.viewerRole;
   const acceptedPrice = assignment?.precioAcordado ? formatMoney(Number(assignment.precioAcordado)) : proposalData.offeredPrice;
+  const counterOfferPrice = pendingCounterOffer?.precioPropuesto
+    ? formatMoney(Number(pendingCounterOffer.precioPropuesto))
+    : proposalData.offeredPrice;
   const canConfirm = Boolean(currentUser?.id && assignment?.id && confirmationRole && !isCompleted && !submitting);
+  const canResolveCounterOffer = Boolean(
+    currentUser?.id &&
+      pendingCounterOffer?.id &&
+      request.viewerRole === "SOLICITANTE" &&
+      assignmentState?.solicitanteId === currentUser.id &&
+      !submitting
+  );
+  const canConfirmAssignment = Boolean(
+    currentUser?.id &&
+      acceptedDistribution?.id &&
+      request.viewerRole === "SOLICITANTE" &&
+      assignmentState?.solicitanteId === currentUser.id &&
+      !submitting
+  );
   const bothConfirmed = requesterConfirmed && providerConfirmed;
+  const canRate = Boolean(
+    assignment?.id &&
+      assignmentState?.solicitanteId &&
+      assignment?.prestadorId &&
+      currentUser?.id &&
+      confirmationRole &&
+      isCompleted
+  );
+  const ratingTargetName = confirmationRole === "PRESTADOR" ? request.requesterName : providerName;
+
+  const handleConfirmAssignment = async () => {
+    if (!currentUser?.id || !acceptedDistribution?.id) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await servifyApi.confirmAssignment({
+        solicitudId: String(request.id),
+        distribucionSolicitudId: acceptedDistribution.id,
+        solicitanteId: currentUser.id,
+      });
+      const updated = await servifyApi.getAssignmentState(String(request.id));
+      setAssignmentState(updated);
+      setShowComplete(
+        Boolean(updated.finalizacionConfirmada) ||
+          updated.estadoSolicitud === "FINALIZADA" ||
+          updated.asignacion?.estado === "FINALIZADA"
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo confirmar el prestador");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResolveCounterOffer = async (decision: "ACEPTAR" | "RECHAZAR") => {
+    if (!currentUser?.id || !pendingCounterOffer?.id) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const resolved = await servifyApi.resolveCounterOffer({
+        contraofertaId: pendingCounterOffer.id,
+        solicitanteId: currentUser.id,
+        decision,
+      });
+      const distribucionSolicitudId = resolved.distribucionSolicitudId ?? pendingCounterOffer.distribucionSolicitudId;
+      if (decision === "ACEPTAR" && distribucionSolicitudId) {
+        await servifyApi.confirmAssignment({
+          solicitudId: String(request.id),
+          distribucionSolicitudId,
+          solicitanteId: currentUser.id,
+        });
+      }
+      const updated = await servifyApi.getAssignmentState(String(request.id));
+      setAssignmentState(updated);
+      setShowComplete(
+        Boolean(updated.finalizacionConfirmada) ||
+          updated.estadoSolicitud === "FINALIZADA" ||
+          updated.asignacion?.estado === "FINALIZADA"
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo resolver la contraoferta");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleConfirm = async () => {
     if (!currentUser?.id || !assignment?.id || !confirmationRole) return;
@@ -132,9 +232,17 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
     completed: { label: "Completada", bg: "#f0fdf4", color: "#16a34a" },
     cancelled: { label: "Cancelada", bg: "#fef2f2", color: "#ef4444" },
     "in-progress": { label: "En curso", bg: "#fffbeb", color: "#d97706" },
+    "counter-offer": { label: "Contraoferta", bg: "#fff7ed", color: "#ea580c" },
   };
 
-  const st = statusConfig[request.status];
+  const displayStatus = isCompleted
+    ? "completed"
+    : hasPendingCounterOffer
+    ? "counter-offer"
+    : hasProposal || hasAcceptedPending
+    ? "in-progress"
+    : request.status;
+  const st = statusConfig[displayStatus] ?? statusConfig.open;
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#f8fafc" }}>
@@ -190,6 +298,88 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
             </div>
           </div>
         </Card>
+
+        {hasPendingCounterOffer && (
+          <Card title={request.viewerRole === "SOLICITANTE" ? "Contraoferta recibida" : "Contraoferta enviada"}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#fff7ed", flexShrink: 0 }}>
+                <MessageSquare size={20} color="#ea580c" strokeWidth={2} />
+              </div>
+              <div className="flex-1">
+                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
+                <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {request.viewerRole === "SOLICITANTE"
+                    ? "El prestador propuso nuevas condiciones para este pedido."
+                    : "Esperando respuesta del solicitante."}
+                </p>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl" style={{ background: "#fffbeb" }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#d97706" }}>{counterOfferPrice}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>
+                {pendingCounterOffer?.mensaje || "El prestador no agrego un mensaje."}
+              </p>
+            </div>
+
+            {request.viewerRole === "SOLICITANTE" && (
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => handleResolveCounterOffer("ACEPTAR")}
+                  disabled={!canResolveCounterOffer}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#16a34a", color: "white", fontWeight: 800, fontSize: 13, opacity: canResolveCounterOffer ? 1 : 0.65 }}
+                >
+                  <CheckCircle size={15} strokeWidth={2} />
+                  {submitting ? "Procesando..." : "Aceptar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleResolveCounterOffer("RECHAZAR")}
+                  disabled={!canResolveCounterOffer}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontWeight: 800, fontSize: 13, opacity: canResolveCounterOffer ? 1 : 0.65 }}
+                >
+                  <XCircle size={15} strokeWidth={2} />
+                  Rechazar
+                </button>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {hasAcceptedPending && (
+          <Card title={request.viewerRole === "SOLICITANTE" ? "Prestador disponible" : "Aceptacion enviada"}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#f0fdf4", flexShrink: 0 }}>
+                <span style={{ fontWeight: 800, fontSize: 14, color: "#16a34a" }}>{providerInitials}</span>
+              </div>
+              <div className="flex-1">
+                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
+                <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {request.viewerRole === "SOLICITANTE"
+                    ? "Acepto tu solicitud. Confirmalo para iniciar el servicio."
+                    : "Ya aceptaste esta solicitud. Falta que el solicitante confirme la asignacion."}
+                </p>
+              </div>
+            </div>
+
+            {request.viewerRole === "SOLICITANTE" && (
+              <button
+                type="button"
+                onClick={handleConfirmAssignment}
+                disabled={!canConfirmAssignment}
+                className="w-full py-3 rounded-xl mt-2 transition-all active:scale-95"
+                style={{ background: "#16a34a", color: "white", fontWeight: 800, fontSize: 14, opacity: canConfirmAssignment ? 1 : 0.65 }}
+              >
+                {submitting ? "Confirmando..." : "Confirmar prestador"}
+              </button>
+            )}
+          </Card>
+        )}
 
         {hasProposal && (
           <Card title="Propuesta aceptada">
@@ -289,16 +479,28 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               <p style={{ fontWeight: 700, fontSize: 15, color: "#15803d", textAlign: "center" }}>
                 Servicio completado con confirmación de ambas partes
               </p>
-              <button
-                onClick={() => onRate(providerName)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all active:scale-95"
-                style={{ background: "#fef3c7", border: "1.5px solid #fde68a" }}
-              >
-                <Star size={16} color="#f59e0b" fill="#f59e0b" />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#d97706" }}>
-                  Calificar a {providerName}
-                </span>
-              </button>
+              {canRate && (
+                <button
+                  onClick={() =>
+                    onRate({
+                      name: ratingTargetName,
+                      solicitudId: String(request.id),
+                      asignacionServicioId: assignment?.id ?? "",
+                      solicitanteId: assignmentState?.solicitanteId ?? "",
+                      prestadorId: assignment?.prestadorId ?? "",
+                      calificadorId: currentUser?.id ?? "",
+                      rolCalificador: confirmationRole as "SOLICITANTE" | "PRESTADOR",
+                    })
+                  }
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#fef3c7", border: "1.5px solid #fde68a" }}
+                >
+                  <Star size={16} color="#f59e0b" fill="#f59e0b" />
+                  <span style={{ fontWeight: 700, fontSize: 14, color: "#d97706" }}>
+                    Calificar a {ratingTargetName}
+                  </span>
+                </button>
+              )}
               <div className="w-full flex flex-col gap-2 pt-1">
                 <ConfirmRow label={request.requesterName} initials={request.requesterInitials} confirmed={requesterConfirmed} />
                 <ConfirmRow label={providerName} initials={providerInitials} confirmed={providerConfirmed} />

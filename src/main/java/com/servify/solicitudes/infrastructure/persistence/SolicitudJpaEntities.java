@@ -118,16 +118,28 @@ class AsignacionServicioJpaEntity {
 
 // ── CalificacionJpaEntity ────────────────────────────────────
 @Entity
-@Table(name = "calificacion")
+@Table(
+        name = "calificacion",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_calificacion_asignacion_rol",
+                columnNames = {"asignacion_id", "rol_calificador"}
+        )
+)
 class CalificacionJpaEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
-    @Column(name = "asignacion_id", nullable = false, unique = true) private Long asignacionId;
+    @Column(name = "asignacion_id", nullable = false) private Long asignacionId;
+    @Column(name = "calificador_id", nullable = false) private Long calificadorId;
+    @Column(name = "calificado_id", nullable = false) private Long calificadoId;
+    @Column(name = "rol_calificador", nullable = false) private String rolCalificador;
     @Column(name = "puntaje", nullable = false) private Integer puntaje;
     @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
 
     protected CalificacionJpaEntity() {}
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
     public Long getAsignacionId() { return asignacionId; } public void setAsignacionId(Long v) { this.asignacionId = v; }
+    public Long getCalificadorId() { return calificadorId; } public void setCalificadorId(Long v) { this.calificadorId = v; }
+    public Long getCalificadoId() { return calificadoId; } public void setCalificadoId(Long v) { this.calificadoId = v; }
+    public String getRolCalificador() { return rolCalificador; } public void setRolCalificador(String v) { this.rolCalificador = v; }
     public Integer getPuntaje() { return puntaje; } public void setPuntaje(Integer v) { this.puntaje = v; }
     public LocalDateTime getCreatedAt() { return createdAt; } public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
 }
