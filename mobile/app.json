@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Servify",
+    "slug": "servify",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.servify.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Servify usa tu galeria para seleccionar una foto de perfil.",
+        "NSCameraUsageDescription": "Servify usa la camara para tomar una foto de perfil."
+      }
+    },
+    "android": {
+      "package": "com.servify.app",
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
+    },
+    "extra": {
+      "apiUrl": ""
+    }
+  }
+}
