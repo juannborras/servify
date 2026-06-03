@@ -12,6 +12,7 @@ public interface PublicacionesCompatiblesPort {
 
     Map<UUID, UUID> buscarPublicacionesCompatibles(UUID solicitudId,
                                                    UUID categoriaServicioId,
+                                                   String descripcionNecesidad,
                                                    ModalidadServicio modalidadRequerida,
                                                    Ubicacion ubicacionRequerida,
                                                    DisponibilidadHoraria disponibilidadRequerida,

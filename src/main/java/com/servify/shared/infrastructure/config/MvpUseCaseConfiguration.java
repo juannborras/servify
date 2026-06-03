@@ -57,6 +57,7 @@ import com.servify.publicaciones.application.service.ListarPublicacionesPorCateg
 import com.servify.publicaciones.application.service.ListarPublicacionesDeUsuarioService;
 import com.servify.publicaciones.application.service.ObtenerPublicacionService;
 import com.servify.publicaciones.domain.service.PoliticaCompatibilidadPublicacion;
+import com.servify.publicaciones.domain.service.PoliticaRelevanciaServicio;
 import com.servify.publicaciones.domain.service.ValidadorDisponibilidadHoraria;
 import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
 import com.servify.solicitudes.application.port.in.ActualizarSolicitudServicioUseCase;
@@ -70,6 +71,7 @@ import com.servify.solicitudes.application.port.in.ListarSolicitudesRecibidasDet
 import com.servify.solicitudes.application.port.in.ListarSolicitudesRecibidasUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerEstadoAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.in.ReintentarDistribucionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ResolverContraofertaUseCase;
 import com.servify.solicitudes.application.port.in.ResponderDistribucionSolicitudUseCase;
 import com.servify.solicitudes.application.port.out.AsignacionServicioRepositoryPort;
@@ -86,12 +88,14 @@ import com.servify.solicitudes.application.service.CancelarSolicitudServicioServ
 import com.servify.solicitudes.application.service.ConfirmarAsignacionSolicitudService;
 import com.servify.solicitudes.application.service.ConfirmarFinalizacionServicioService;
 import com.servify.solicitudes.application.service.CrearSolicitudServicioService;
+import com.servify.solicitudes.application.service.DistribuidorSolicitudService;
 import com.servify.solicitudes.application.service.EmitirContraofertaService;
 import com.servify.solicitudes.application.service.ListarSolicitudesDelSolicitanteService;
 import com.servify.solicitudes.application.service.ListarSolicitudesRecibidasDetalladasService;
 import com.servify.solicitudes.application.service.ListarSolicitudesRecibidasService;
 import com.servify.solicitudes.application.service.ObtenerEstadoAsignacionSolicitudService;
 import com.servify.solicitudes.application.service.ObtenerSolicitudServicioService;
+import com.servify.solicitudes.application.service.ReintentarDistribucionSolicitudService;
 import com.servify.solicitudes.application.service.ResolverContraofertaService;
 import com.servify.solicitudes.application.service.ResponderDistribucionSolicitudService;
 import com.servify.solicitudes.domain.service.MotorDistribucionSolicitudes;
@@ -134,6 +138,11 @@ public class MvpUseCaseConfiguration {
     @Bean
     PoliticaCompatibilidadPublicacion politicaCompatibilidadPublicacion() {
         return new PoliticaCompatibilidadPublicacion();
+    }
+
+    @Bean
+    PoliticaRelevanciaServicio politicaRelevanciaServicio() {
+        return new PoliticaRelevanciaServicio();
     }
 
     @Bean
@@ -366,29 +375,40 @@ public class MvpUseCaseConfiguration {
     BuscarPublicacionesCompatiblesUseCase buscarPublicacionesCompatiblesUseCase(
             PublicacionServicioRepositoryPort publicacionServicioRepositoryPort,
             CategoriaServicioRepositoryPort categoriaServicioRepositoryPort,
-            PoliticaCompatibilidadPublicacion politicaCompatibilidadPublicacion
+            PoliticaCompatibilidadPublicacion politicaCompatibilidadPublicacion,
+            PoliticaRelevanciaServicio politicaRelevanciaServicio
     ) {
         return new BuscarPublicacionesCompatiblesService(
                 publicacionServicioRepositoryPort,
                 categoriaServicioRepositoryPort,
-                politicaCompatibilidadPublicacion
+                politicaCompatibilidadPublicacion,
+                politicaRelevanciaServicio
+        );
+    }
+
+    @Bean
+    DistribuidorSolicitudService distribuidorSolicitudService(
+            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+            PublicacionesCompatiblesPort publicacionesCompatiblesPort,
+            ConfiguracionDistribucionPort configuracionDistribucionPort,
+            MotorDistribucionSolicitudes motorDistribucionSolicitudes
+    ) {
+        return new DistribuidorSolicitudService(
+                distribucionSolicitudRepositoryPort,
+                publicacionesCompatiblesPort,
+                configuracionDistribucionPort,
+                motorDistribucionSolicitudes
         );
     }
 
     @Bean
     CrearSolicitudServicioUseCase crearSolicitudServicioUseCase(
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
-            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
-            PublicacionesCompatiblesPort publicacionesCompatiblesPort,
-            ConfiguracionDistribucionPort configuracionDistribucionPort,
-            MotorDistribucionSolicitudes motorDistribucionSolicitudes
+            DistribuidorSolicitudService distribuidorSolicitudService
     ) {
         return new CrearSolicitudServicioService(
                 solicitudServicioRepositoryPort,
-                distribucionSolicitudRepositoryPort,
-                publicacionesCompatiblesPort,
-                configuracionDistribucionPort,
-                motorDistribucionSolicitudes
+                distribuidorSolicitudService
         );
     }
 
@@ -401,9 +421,21 @@ public class MvpUseCaseConfiguration {
 
     @Bean
     ActualizarSolicitudServicioUseCase actualizarSolicitudServicioUseCase(
-            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            DistribuidorSolicitudService distribuidorSolicitudService
     ) {
-        return new ActualizarSolicitudServicioService(solicitudServicioRepositoryPort);
+        return new ActualizarSolicitudServicioService(solicitudServicioRepositoryPort, distribuidorSolicitudService);
+    }
+
+    @Bean
+    ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase(
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            DistribuidorSolicitudService distribuidorSolicitudService
+    ) {
+        return new ReintentarDistribucionSolicitudService(
+                solicitudServicioRepositoryPort,
+                distribuidorSolicitudService
+        );
     }
 
     @Bean

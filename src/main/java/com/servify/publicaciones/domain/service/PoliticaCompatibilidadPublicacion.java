@@ -97,8 +97,6 @@ public class PoliticaCompatibilidadPublicacion {
             return false;
         }
         return publicacion.getDisponibilidadesHorarias().stream()
-                .anyMatch(d -> d.getDiaSemana().equals(disponibilidadRequerida.getDiaSemana())
-                        && !d.getHoraDesde().isAfter(disponibilidadRequerida.getHoraDesde())
-                        && !d.getHoraHasta().isBefore(disponibilidadRequerida.getHoraHasta()));
+                .anyMatch(d -> d.seSuperponeCon(disponibilidadRequerida));
     }
 }

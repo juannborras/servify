@@ -15,9 +15,18 @@ import java.util.UUID;
 public class ActualizarSolicitudServicioService implements ActualizarSolicitudServicioUseCase {
 
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
+    private final DistribuidorSolicitudService distribuidorSolicitudService;
 
     public ActualizarSolicitudServicioService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort) {
+        this(solicitudServicioRepositoryPort, null);
+    }
+
+    public ActualizarSolicitudServicioService(
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            DistribuidorSolicitudService distribuidorSolicitudService
+    ) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
+        this.distribuidorSolicitudService = distribuidorSolicitudService;
     }
 
     @Override
@@ -30,7 +39,14 @@ public class ActualizarSolicitudServicioService implements ActualizarSolicitudSe
         aplicarCambios(solicitud, command);
 
         SolicitudServicio guardada = solicitudServicioRepositoryPort.guardar(solicitud);
+        redistribuirSiCorresponde(guardada);
         return construirResultado(guardada);
+    }
+
+    protected void redistribuirSiCorresponde(SolicitudServicio solicitud) {
+        if (distribuidorSolicitudService != null) {
+            distribuidorSolicitudService.distribuir(solicitud);
+        }
     }
 
     protected void validarCommand(ActualizarSolicitudServicioCommand command) {

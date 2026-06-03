@@ -201,6 +201,7 @@ public class PublicacionesApiController {
                 new BuscarPublicacionesCompatiblesQuery(
                         request.solicitudServicioId,
                         request.categoriaServicioId,
+                        request.descripcionNecesidad,
                         request.modalidadRequerida,
                         ubicacion,
                         disponibilidad,
@@ -254,6 +255,7 @@ public class PublicacionesApiController {
     public static class BuscarCompatiblesRequest {
         public UUID solicitudServicioId;
         public UUID categoriaServicioId;
+        public String descripcionNecesidad;
         public ModalidadServicio modalidadRequerida;
         public MvpWebMapper.UbicacionPayload ubicacionRequerida;
         public MvpWebMapper.DisponibilidadPayload disponibilidadRequerida;

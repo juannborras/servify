@@ -135,6 +135,16 @@ public class DistribucionSolicitud extends BaseEntity {
         this.estado = EstadoDistribucion.ENVIADA;
     }
 
+    public void reasignarPublicacion(UUID publicacionServicioId) {
+        if (publicacionServicioId == null) {
+            throw new IllegalArgumentException("publicacionServicioId no puede ser nulo");
+        }
+        if (!estaEnviada()) {
+            throw new IllegalStateException("Solo se puede reasignar una distribucion pendiente");
+        }
+        this.publicacionServicioId = publicacionServicioId;
+    }
+
     public void aceptar(LocalDateTime fechaRespuesta) {
         if (fechaRespuesta == null) {
             throw new IllegalArgumentException("La fecha de respuesta no puede ser nula");

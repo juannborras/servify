@@ -6,8 +6,10 @@ import com.servify.solicitudes.domain.model.DistribucionSolicitud;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 //se utilizo:
@@ -35,11 +37,15 @@ public class MotorDistribucionSolicitudes {
         }
         
         int ronda = 1;
+        Set<UUID> publicacionesIncluidas = new HashSet<>();
+        Set<UUID> prestadoresIncluidos = new HashSet<>();
         for (Map.Entry<UUID, UUID> entrada : publicacionesPorPrestador.entrySet()) {
             UUID publicacionId = entrada.getKey();
             UUID prestadorId = entrada.getValue();
             
-            if (publicacionId != null && prestadorId != null) {
+            if (publicacionId != null && prestadorId != null
+                    && publicacionesIncluidas.add(publicacionId)
+                    && prestadoresIncluidos.add(prestadorId)) {
                 DistribucionSolicitud distribucion = new DistribucionSolicitud(
                         UUID.randomUUID(),
                         solicitud.getId(),
@@ -71,13 +77,17 @@ public class MotorDistribucionSolicitudes {
         
         Integer proximaRonda = calcularSiguienteRonda(distribucionesExistentes);
         
+        Set<UUID> publicacionesIncluidas = new HashSet<>();
+        Set<UUID> prestadoresIncluidos = new HashSet<>();
         for (Map.Entry<UUID, UUID> entrada : publicacionesPorPrestador.entrySet()) {
             UUID publicacionId = entrada.getKey();
             UUID prestadorId = entrada.getValue();
             
             if (publicacionId != null && prestadorId != null &&
                     !yaFueDistribuidaAPublicacion(publicacionId, distribucionesExistentes) &&
-                    !yaFueDistribuidaAPrestador(prestadorId, distribucionesExistentes)) {
+                    !yaFueDistribuidaAPrestador(prestadorId, distribucionesExistentes) &&
+                    publicacionesIncluidas.add(publicacionId) &&
+                    prestadoresIncluidos.add(prestadorId)) {
                 
                 DistribucionSolicitud distribucion = new DistribucionSolicitud(
                         UUID.randomUUID(),

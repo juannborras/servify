@@ -14,6 +14,7 @@ public class BuscarPublicacionesCompatiblesQuery {
 
     private UUID solicitudServicioId;
     private UUID categoriaServicioId;
+    private String descripcionNecesidad;
     private ModalidadServicio modalidadRequerida;
     private Ubicacion ubicacionRequerida;
     private DisponibilidadHoraria disponibilidadRequerida;
@@ -25,6 +26,7 @@ public class BuscarPublicacionesCompatiblesQuery {
 
     public BuscarPublicacionesCompatiblesQuery(UUID solicitudServicioId,
                                                UUID categoriaServicioId,
+                                               String descripcionNecesidad,
                                                ModalidadServicio modalidadRequerida,
                                                Ubicacion ubicacionRequerida,
                                                DisponibilidadHoraria disponibilidadRequerida,
@@ -32,6 +34,7 @@ public class BuscarPublicacionesCompatiblesQuery {
                                                Double radioBusquedaKm) {
         this.solicitudServicioId = solicitudServicioId;
         this.categoriaServicioId = categoriaServicioId;
+        this.descripcionNecesidad = descripcionNecesidad;
         this.modalidadRequerida = modalidadRequerida;
         this.ubicacionRequerida = ubicacionRequerida;
         this.disponibilidadRequerida = disponibilidadRequerida;
@@ -45,6 +48,10 @@ public class BuscarPublicacionesCompatiblesQuery {
 
     public UUID getCategoriaServicioId() {
         return categoriaServicioId;
+    }
+
+    public String getDescripcionNecesidad() {
+        return descripcionNecesidad;
     }
 
     public ModalidadServicio getModalidadRequerida() {

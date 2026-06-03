@@ -7,30 +7,25 @@ import com.servify.solicitudes.application.dto.DisponibilidadHorariaResult;
 import com.servify.solicitudes.application.dto.SolicitudServicioResult;
 import com.servify.solicitudes.application.dto.UbicacionSolicitudResult;
 import com.servify.solicitudes.application.port.in.CrearSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
+import com.servify.solicitudes.domain.enumtype.EstadoSolicitud;
+import com.servify.solicitudes.domain.model.SolicitudServicio;
 import com.servify.solicitudes.application.port.out.ConfiguracionDistribucionPort;
 import com.servify.solicitudes.application.port.out.DistribucionSolicitudRepositoryPort;
 import com.servify.solicitudes.application.port.out.PublicacionesCompatiblesPort;
-import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
-import com.servify.solicitudes.domain.enumtype.EstadoSolicitud;
-import com.servify.solicitudes.domain.model.DistribucionSolicitud;
-import com.servify.solicitudes.domain.model.SolicitudServicio;
 import com.servify.solicitudes.domain.service.MotorDistribucionSolicitudes;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 public class CrearSolicitudServicioService implements CrearSolicitudServicioUseCase {
 
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
-    private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
-    private final PublicacionesCompatiblesPort publicacionesCompatiblesPort;
-    private final ConfiguracionDistribucionPort configuracionDistribucionPort;
-    private final MotorDistribucionSolicitudes motorDistribucionSolicitudes;
+    private final DistribuidorSolicitudService distribuidorSolicitudService;
 
     public CrearSolicitudServicioService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort) {
-        this(solicitudServicioRepositoryPort, null, null, null, null);
+        this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
+        this.distribuidorSolicitudService = null;
     }
 
     public CrearSolicitudServicioService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
@@ -38,11 +33,18 @@ public class CrearSolicitudServicioService implements CrearSolicitudServicioUseC
                                          PublicacionesCompatiblesPort publicacionesCompatiblesPort,
                                          ConfiguracionDistribucionPort configuracionDistribucionPort,
                                          MotorDistribucionSolicitudes motorDistribucionSolicitudes) {
+        this(solicitudServicioRepositoryPort, new DistribuidorSolicitudService(
+                distribucionSolicitudRepositoryPort,
+                publicacionesCompatiblesPort,
+                configuracionDistribucionPort,
+                motorDistribucionSolicitudes
+        ));
+    }
+
+    public CrearSolicitudServicioService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                         DistribuidorSolicitudService distribuidorSolicitudService) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
-        this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
-        this.publicacionesCompatiblesPort = publicacionesCompatiblesPort;
-        this.configuracionDistribucionPort = configuracionDistribucionPort;
-        this.motorDistribucionSolicitudes = motorDistribucionSolicitudes;
+        this.distribuidorSolicitudService = distribuidorSolicitudService;
     }
 
     @Override
@@ -82,54 +84,9 @@ public class CrearSolicitudServicioService implements CrearSolicitudServicioUseC
     }
 
     protected void distribuirSolicitudSiCorresponde(SolicitudServicio solicitud) {
-        if (!distribucionInicialHabilitada() || solicitud == null) {
-            return;
+        if (distribuidorSolicitudService != null) {
+            distribuidorSolicitudService.distribuir(solicitud);
         }
-        if (!motorDistribucionSolicitudes.debeIniciarDistribucion(solicitud)) {
-            return;
-        }
-
-        Integer radioInicialKm = configuracionDistribucionPort.obtenerRadioBusquedaInicialKm();
-        Map<UUID, UUID> publicacionesCompatibles = publicacionesCompatiblesPort.buscarPublicacionesCompatibles(
-                solicitud.getId(),
-                solicitud.getCategoriaServicioId(),
-                solicitud.getModalidadServicio(),
-                solicitud.getUbicacion(),
-                solicitud.getDisponibilidadRequerida(),
-                solicitud.getPrecioReferencia(),
-                radioInicialKm
-        );
-
-        LocalDateTime fechaEnvio = obtenerFechaActual();
-        LocalDateTime fechaExpiracion = calcularFechaExpiracion(fechaEnvio);
-        List<DistribucionSolicitud> distribuciones = motorDistribucionSolicitudes.crearDistribucionesIniciales(
-                solicitud,
-                publicacionesCompatibles,
-                fechaEnvio,
-                fechaExpiracion
-        );
-
-        for (DistribucionSolicitud distribucion : distribuciones) {
-            distribucionSolicitudRepositoryPort.guardar(distribucion);
-        }
-    }
-
-    private boolean distribucionInicialHabilitada() {
-        return distribucionSolicitudRepositoryPort != null
-                && publicacionesCompatiblesPort != null
-                && configuracionDistribucionPort != null
-                && motorDistribucionSolicitudes != null;
-    }
-
-    private LocalDateTime calcularFechaExpiracion(LocalDateTime fechaEnvio) {
-        if (fechaEnvio == null || configuracionDistribucionPort == null) {
-            return null;
-        }
-        Integer minutosEspera = configuracionDistribucionPort.obtenerTiempoEsperaExpansionMinutos();
-        if (minutosEspera == null || minutosEspera <= 0) {
-            return null;
-        }
-        return fechaEnvio.plusMinutes(minutosEspera);
     }
 
     protected SolicitudServicio construirSolicitud(CrearSolicitudServicioCommand command) {

@@ -8,6 +8,7 @@ import com.servify.publicaciones.application.port.out.PublicacionServicioReposit
 import com.servify.publicaciones.domain.model.CategoriaServicio;
 import com.servify.publicaciones.domain.model.PublicacionServicio;
 import com.servify.publicaciones.domain.service.PoliticaCompatibilidadPublicacion;
+import com.servify.publicaciones.domain.service.PoliticaRelevanciaServicio;
 import com.servify.shared.domain.enumtype.ModalidadServicio;
 
 import java.math.BigDecimal;
@@ -22,13 +23,16 @@ public class BuscarPublicacionesCompatiblesService implements BuscarPublicacione
     private final PublicacionServicioRepositoryPort publicacionServicioRepositoryPort;
     private final CategoriaServicioRepositoryPort categoriaServicioRepositoryPort;
     private final PoliticaCompatibilidadPublicacion politicaCompatibilidadPublicacion;
+    private final PoliticaRelevanciaServicio politicaRelevanciaServicio;
 
     public BuscarPublicacionesCompatiblesService(PublicacionServicioRepositoryPort publicacionServicioRepositoryPort,
                                                  CategoriaServicioRepositoryPort categoriaServicioRepositoryPort,
-                                                 PoliticaCompatibilidadPublicacion politicaCompatibilidadPublicacion) {
+                                                 PoliticaCompatibilidadPublicacion politicaCompatibilidadPublicacion,
+                                                 PoliticaRelevanciaServicio politicaRelevanciaServicio) {
         this.publicacionServicioRepositoryPort = publicacionServicioRepositoryPort;
         this.categoriaServicioRepositoryPort = categoriaServicioRepositoryPort;
         this.politicaCompatibilidadPublicacion = politicaCompatibilidadPublicacion;
+        this.politicaRelevanciaServicio = politicaRelevanciaServicio;
     }
 
     @Override
@@ -56,7 +60,9 @@ public class BuscarPublicacionesCompatiblesService implements BuscarPublicacione
     // Consulta publicaciones activas acotadas por categoría
     protected List<PublicacionServicio> obtenerCandidatas(BuscarPublicacionesCompatiblesQuery query) {
         return publicacionServicioRepositoryPort
-                .buscarActivasPorCategoria(query.getCategoriaServicioId());
+                .buscarActivasPorCategoria(query.getCategoriaServicioId()).stream()
+                .sorted(politicaRelevanciaServicio.compararPorRelevancia(query.getDescripcionNecesidad()))
+                .toList();
     }
 
     // Delega la validación de compatibilidad en PoliticaCompatibilidadPublicacion

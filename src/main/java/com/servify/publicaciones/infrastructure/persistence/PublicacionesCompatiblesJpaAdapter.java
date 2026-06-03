@@ -1,6 +1,7 @@
 package com.servify.publicaciones.infrastructure.persistence;
 
 import com.servify.publicaciones.domain.service.PoliticaCompatibilidadPublicacion;
+import com.servify.publicaciones.domain.service.PoliticaRelevanciaServicio;
 import com.servify.shared.domain.enumtype.ModalidadServicio;
 import com.servify.shared.domain.valueobject.DisponibilidadHoraria;
 import com.servify.shared.domain.valueobject.Ubicacion;
@@ -21,19 +22,23 @@ public class PublicacionesCompatiblesJpaAdapter implements PublicacionesCompatib
     private final CategoriaServicioJpaAdapter categoriaAdapter;
     private final PublicacionJpaAdapter publicacionAdapter;
     private final PoliticaCompatibilidadPublicacion politica;
+    private final PoliticaRelevanciaServicio politicaRelevanciaServicio;
 
     public PublicacionesCompatiblesJpaAdapter(PublicacionServicioJpaRepository publicacionRepo,
                                                CategoriaServicioJpaAdapter categoriaAdapter,
-                                               PublicacionJpaAdapter publicacionAdapter) {
+                                               PublicacionJpaAdapter publicacionAdapter,
+                                               PoliticaRelevanciaServicio politicaRelevanciaServicio) {
         this.publicacionRepo = publicacionRepo;
         this.categoriaAdapter = categoriaAdapter;
         this.publicacionAdapter = publicacionAdapter;
         this.politica = new PoliticaCompatibilidadPublicacion();
+        this.politicaRelevanciaServicio = politicaRelevanciaServicio;
     }
 
     @Override
     public Map<UUID, UUID> buscarPublicacionesCompatibles(UUID solicitudId,
                                                           UUID categoriaServicioId,
+                                                          String descripcionNecesidad,
                                                           ModalidadServicio modalidadRequerida,
                                                           Ubicacion ubicacionRequerida,
                                                           DisponibilidadHoraria disponibilidadRequerida,
@@ -42,14 +47,13 @@ public class PublicacionesCompatiblesJpaAdapter implements PublicacionesCompatib
         var categoria = categoriaAdapter.buscarPorId(categoriaServicioId).orElse(null);
         Map<UUID, UUID> compatibles = new LinkedHashMap<>();
 
-        publicacionRepo.findByEstado("activa").forEach(e -> {
-            var publicacion = publicacionAdapter.buscarPorId(UsuarioJpaAdapter.uuidFromLong(e.getId())).orElse(null);
-            if (publicacion != null && politica.esCompatible(
-                    publicacion, categoria, modalidadRequerida, ubicacionRequerida, disponibilidadRequerida)
-                    && estaDentroDelRadio(modalidadRequerida, ubicacionRequerida, publicacion.getUbicacionesParaMatching(), radioBusquedaKm)) {
-                compatibles.put(publicacion.getId(), publicacion.getUsuarioId());
-            }
-        });
+        publicacionRepo.findByEstado("activa").stream()
+                .map(e -> publicacionAdapter.buscarPorId(UsuarioJpaAdapter.uuidFromLong(e.getId())).orElse(null))
+                .filter(publicacion -> publicacion != null && politica.esCompatible(
+                        publicacion, categoria, modalidadRequerida, ubicacionRequerida, disponibilidadRequerida)
+                        && estaDentroDelRadio(modalidadRequerida, ubicacionRequerida, publicacion.getUbicacionesParaMatching(), radioBusquedaKm))
+                .sorted(politicaRelevanciaServicio.compararPorRelevancia(descripcionNecesidad))
+                .forEach(publicacion -> compatibles.put(publicacion.getId(), publicacion.getUsuarioId()));
 
         return compatibles;
     }

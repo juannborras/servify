@@ -465,6 +465,367 @@ class MvpHttpFlowTests {
     }
 
     @Test
+    void disponibilidadSolapadaGeneraMatchingAunqueNoSeaIdentica() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-gasista-solapado-http@servify.test");
+        UUID prestadorId = crearUsuario("gasista-solapado-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Gasista solapado HTTP");
+
+        UUID publicacionId = idFrom(postCreatedPath("/api/v1/publicaciones", """
+                {
+                  "usuarioId": "%s",
+                  "categoriaServicioId": "%s",
+                  "titulo": "Gasista matriculado solapado HTTP",
+                  "descripcion": "Reparaciones de gas y revisiones",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1234",
+                    "referencia": "PB",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadesHorarias": [
+                    {
+                      "diaSemana": "MONDAY",
+                      "horaDesde": "10:00:00",
+                      "horaHasta": "12:00:00"
+                    }
+                  ],
+                  "precioBase": 18000
+                }
+                """.formatted(prestadorId, categoriaId)));
+
+        putOrPatchPublicacionEstado(publicacionId, prestadorId, "ACTIVA");
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "MONDAY",
+                    "horaDesde": "11:30:00",
+                    "horaHasta": "13:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito reparar una perdida de gas",
+                  "precioReferencia": 20000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidas = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertNotNull(solicitudId);
+        assertEquals(1, recibidas.size());
+        assertEquals(publicacionId.toString(), recibidas.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
+    void rangoDeDiasDePublicacionMatcheaSolicitudEnDiaIntermedio() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-gasista-rango-http@servify.test");
+        UUID prestadorId = crearUsuario("gasista-rango-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Gasista rango dias HTTP");
+
+        UUID publicacionId = idFrom(postCreatedPath("/api/v1/publicaciones", """
+                {
+                  "usuarioId": "%s",
+                  "categoriaServicioId": "%s",
+                  "titulo": "Gasista con rango semanal HTTP",
+                  "descripcion": "Reparaciones de gas de lunes a viernes",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1234",
+                    "referencia": "PB",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadesHorarias": [
+                    { "diaSemana": "MONDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" },
+                    { "diaSemana": "TUESDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" },
+                    { "diaSemana": "WEDNESDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" },
+                    { "diaSemana": "THURSDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" },
+                    { "diaSemana": "FRIDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" }
+                  ],
+                  "precioBase": 18000
+                }
+                """.formatted(prestadorId, categoriaId)));
+
+        putOrPatchPublicacionEstado(publicacionId, prestadorId, "ACTIVA");
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "WEDNESDAY",
+                    "horaDesde": "11:00:00",
+                    "horaHasta": "12:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito reparar un calefon",
+                  "precioReferencia": 20000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidas = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertNotNull(solicitudId);
+        assertEquals(1, recibidas.size());
+        assertEquals(publicacionId.toString(), recibidas.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
+    void matchingPriorizaServicioRelevanteAunqueOtraPublicacionSeaMasReciente() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-relevancia-servicio-http@servify.test");
+        UUID prestadorId = crearUsuario("prestador-relevancia-servicio-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Reparaciones relevancia HTTP");
+
+        UUID gasistaId = crearPublicacionActiva(
+                prestadorId,
+                categoriaId,
+                "Gasista matriculado HTTP",
+                "Palermo",
+                20000
+        );
+        UUID plomeroId = crearPublicacionActiva(
+                prestadorId,
+                categoriaId,
+                "Plomero sanitario HTTP",
+                "Palermo",
+                18000
+        );
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "MONDAY",
+                    "horaDesde": "10:00:00",
+                    "horaHasta": "11:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito reparar un calefon de gas",
+                  "precioReferencia": 22000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidas = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertNotNull(solicitudId);
+        assertNotNull(plomeroId);
+        assertEquals(1, recibidas.size());
+        assertEquals(gasistaId.toString(), recibidas.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
+    void reintentarDistribucionEncuentraPublicacionCreadaDespuesDeLaSolicitud() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-reintento-matching-http@servify.test");
+        UUID prestadorId = crearUsuario("prestador-reintento-matching-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Reintento matching HTTP");
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "THURSDAY",
+                    "horaDesde": "12:00:00",
+                    "horaHasta": "13:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito reparar un calefon",
+                  "precioReferencia": 20000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidasAntes = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertEquals(0, recibidasAntes.size());
+
+        UUID publicacionId = idFrom(postCreatedPath("/api/v1/publicaciones", """
+                {
+                  "usuarioId": "%s",
+                  "categoriaServicioId": "%s",
+                  "titulo": "Gasista post solicitud HTTP",
+                  "descripcion": "Reparaciones de gas",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1234",
+                    "referencia": "PB",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadesHorarias": [
+                    { "diaSemana": "THURSDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" }
+                  ],
+                  "precioBase": 18000
+                }
+                """.formatted(prestadorId, categoriaId)));
+
+        putOrPatchPublicacionEstado(publicacionId, prestadorId, "ACTIVA");
+
+        JsonNode nuevasDistribuciones = responseJson(postPath(
+                "/api/v1/solicitudes/" + solicitudId + "/distribuciones/reintentos",
+                "{}"
+        ));
+        assertEquals(1, nuevasDistribuciones.size());
+        assertEquals(publicacionId.toString(), nuevasDistribuciones.get(0).get("publicacionServicioId").asText());
+
+        JsonNode recibidasDespues = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertEquals(1, recibidasDespues.size());
+        assertEquals(publicacionId.toString(), recibidasDespues.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
+    void editarSolicitudActivaRedistribuyeConNuevaDisponibilidadCompatible() throws Exception {
+        UUID solicitanteId = crearUsuario("cliente-edita-redistribuye-http@servify.test");
+        UUID prestadorId = crearUsuario("prestador-edita-redistribuye-http@servify.test");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Edita redistribuye HTTP");
+        UUID publicacionId = idFrom(postCreatedPath("/api/v1/publicaciones", """
+                {
+                  "usuarioId": "%s",
+                  "categoriaServicioId": "%s",
+                  "titulo": "Gasista jueves HTTP",
+                  "descripcion": "Reparaciones de gas",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1234",
+                    "referencia": "PB",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadesHorarias": [
+                    { "diaSemana": "THURSDAY", "horaDesde": "09:00:00", "horaHasta": "18:00:00" }
+                  ],
+                  "precioBase": 18000
+                }
+                """.formatted(prestadorId, categoriaId)));
+        putOrPatchPublicacionEstado(publicacionId, prestadorId, "ACTIVA");
+
+        UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
+                {
+                  "solicitanteId": "%s",
+                  "categoriaServicioId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "MONDAY",
+                    "horaDesde": "12:00:00",
+                    "horaHasta": "13:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito reparar un calefon",
+                  "precioReferencia": 20000
+                }
+                """.formatted(solicitanteId, categoriaId)));
+
+        JsonNode recibidasAntes = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertEquals(0, recibidasAntes.size());
+
+        responseJson(putPath("/api/v1/solicitudes/" + solicitudId, """
+                {
+                  "solicitanteId": "%s",
+                  "modalidadServicio": "PRESENCIAL",
+                  "ubicacion": {
+                    "pais": "Argentina",
+                    "provincia": "Buenos Aires",
+                    "ciudad": "CABA",
+                    "localidad": "Palermo",
+                    "calle": "Santa Fe",
+                    "altura": "1400",
+                    "referencia": "Depto 2",
+                    "latitud": -34.5889,
+                    "longitud": -58.4306
+                  },
+                  "disponibilidadRequerida": {
+                    "diaSemana": "THURSDAY",
+                    "horaDesde": "12:00:00",
+                    "horaHasta": "13:00:00"
+                  },
+                  "descripcionNecesidad": "Necesito reparar un calefon el jueves",
+                  "precioReferencia": 20000
+                }
+                """.formatted(solicitanteId)));
+
+        JsonNode recibidasDespues = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
+        assertEquals(1, recibidasDespues.size());
+        assertEquals(publicacionId.toString(), recibidasDespues.get(0).get("publicacionServicioId").asText());
+    }
+
+    @Test
     void solicitantePuedeEditarYCancelarSolicitudActiva() throws Exception {
         UUID solicitanteId = crearUsuario("cliente-edita-solicitud-http@servify.test");
         UUID categoriaId = crearCategoriaActiva("Solicitudes editables HTTP");

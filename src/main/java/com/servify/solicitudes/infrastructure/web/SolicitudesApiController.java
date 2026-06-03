@@ -12,6 +12,7 @@ import com.servify.solicitudes.application.dto.ConfirmarAsignacionSolicitudComma
 import com.servify.solicitudes.application.dto.ConfirmarFinalizacionServicioCommand;
 import com.servify.solicitudes.application.dto.ContraofertaResult;
 import com.servify.solicitudes.application.dto.CrearSolicitudServicioCommand;
+import com.servify.solicitudes.application.dto.DistribucionSolicitudResult;
 import com.servify.solicitudes.application.dto.EmitirContraofertaCommand;
 import com.servify.solicitudes.application.dto.EstadoAsignacionSolicitudResult;
 import com.servify.solicitudes.application.dto.ResolverContraofertaCommand;
@@ -31,6 +32,7 @@ import com.servify.solicitudes.application.port.in.ListarSolicitudesDelSolicitan
 import com.servify.solicitudes.application.port.in.ListarSolicitudesRecibidasDetalladasUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerEstadoAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.in.ReintentarDistribucionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ResolverContraofertaUseCase;
 import com.servify.solicitudes.application.port.in.ResponderDistribucionSolicitudUseCase;
 import com.servify.solicitudes.domain.enumtype.RolConfirmante;
@@ -65,6 +67,7 @@ public class SolicitudesApiController {
     private final CalificarServicioUseCase calificarServicioUseCase;
     private final CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase;
     private final ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase;
+    private final ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase;
 
     public SolicitudesApiController(
             CrearSolicitudServicioUseCase crearSolicitudServicioUseCase,
@@ -79,7 +82,8 @@ public class SolicitudesApiController {
             ConfirmarFinalizacionServicioUseCase confirmarFinalizacionServicioUseCase,
             CalificarServicioUseCase calificarServicioUseCase,
             CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase,
-            ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase
+            ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase,
+            ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase
     ) {
         this.crearSolicitudServicioUseCase = crearSolicitudServicioUseCase;
         this.actualizarSolicitudServicioUseCase = actualizarSolicitudServicioUseCase;
@@ -94,6 +98,7 @@ public class SolicitudesApiController {
         this.calificarServicioUseCase = calificarServicioUseCase;
         this.cancelarSolicitudServicioUseCase = cancelarSolicitudServicioUseCase;
         this.obtenerEstadoAsignacionSolicitudUseCase = obtenerEstadoAsignacionSolicitudUseCase;
+        this.reintentarDistribucionSolicitudUseCase = reintentarDistribucionSolicitudUseCase;
     }
 
     @PostMapping("/solicitudes")
@@ -222,6 +227,11 @@ public class SolicitudesApiController {
     @GetMapping("/solicitudes/{solicitudId}/estado-asignacion")
     public ResponseEntity<EstadoAsignacionSolicitudResult> obtenerEstadoAsignacion(@PathVariable UUID solicitudId) {
         return ResponseEntity.ok(obtenerEstadoAsignacionSolicitudUseCase.obtenerEstado(solicitudId));
+    }
+
+    @PostMapping("/solicitudes/{solicitudId}/distribuciones/reintentos")
+    public ResponseEntity<List<DistribucionSolicitudResult>> reintentarDistribucion(@PathVariable UUID solicitudId) {
+        return ResponseEntity.ok(reintentarDistribucionSolicitudUseCase.reintentar(solicitudId));
     }
 
     @PostMapping("/solicitudes/{solicitudId}/finalizaciones/confirmaciones")
