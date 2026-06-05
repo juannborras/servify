@@ -270,6 +270,17 @@ export interface ApiRatingSummary {
   promedioEstrellas: number;
 }
 
+export interface ApiServiceRating {
+  id?: string;
+  solicitudId: string;
+  asignacionServicioId: string;
+  calificadorId?: string;
+  calificadoId?: string;
+  rolCalificador: "SOLICITANTE" | "PRESTADOR";
+  puntaje: number;
+  fechaCalificacion?: string;
+}
+
 export interface ProfilePreferences {
   email?: string;
   availabilityDayFrom?: string;
@@ -845,6 +856,18 @@ export const servifyApi = {
         puntaje: input.puntaje,
       }),
     });
+  },
+
+  async getServiceRating(input: {
+    solicitudId: string;
+    asignacionServicioId: string;
+    rolCalificador: "SOLICITANTE" | "PRESTADOR";
+  }) {
+    const params = new URLSearchParams({
+      asignacionServicioId: input.asignacionServicioId,
+      rolCalificador: input.rolCalificador,
+    });
+    return request<ApiServiceRating>(`/solicitudes/${input.solicitudId}/calificaciones?${params.toString()}`);
   },
 
   getAccountConfig(userId: string) {

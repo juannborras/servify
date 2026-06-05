@@ -106,6 +106,7 @@ export default function App() {
             userName={user?.name ?? "Usuario"}
             onCreateRequest={() => setShowNewRequest(true)}
             onCategoryPress={handleCategoryPress}
+            onAcceptedRequest={handleRequestPress}
           />
         );
       case "category-publications":
@@ -231,6 +232,7 @@ export default function App() {
                     rolCalificador: ratingTarget.rolCalificador,
                     puntaje: rating,
                   });
+                  ratingTarget.onSubmitted?.(rating);
                 }}
               />
             </div>

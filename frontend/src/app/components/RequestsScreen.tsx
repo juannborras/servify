@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, MapPin, Users, DollarSign, Clock, CheckCircle, XCircle, MessageSquare, Edit2, Trash2, Ban, X, Save } from "lucide-react";
 import { motion } from "motion/react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiCategory, type ApiReceivedRequest, type ApiRequest, type ApiUserProfile } from "../api";
@@ -20,6 +20,8 @@ export interface ServiceRequest {
   status: "open" | "completed" | "cancelled" | "in-progress" | "counter-offer";
   requesterName: string;
   requesterInitials: string;
+  providerName?: string;
+  providerInitials?: string;
   modal: "Presencial" | "Virtual" | "Ambas";
   locality?: string;
   availabilityDay?: string;
@@ -80,22 +82,31 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
       .then(async ([own, received, categories]) => {
         const categoryMap = buildCategoryMap(categories);
         const requesterMap = await buildRequesterMap(own, received);
-        const ownMapped = await Promise.all(
-          own.map(async (req) => {
-            const mapped = mapRequest(req, "SOLICITANTE", categoryMap, requesterMap);
-            const state = await servifyApi.getAssignmentState(req.id).catch(() => null);
-            return applyAssignmentState(mapped, state);
-          })
+        const ownStates = await Promise.all(
+          own.map(async (req) => ({
+            requestId: req.id,
+            state: await servifyApi.getAssignmentState(req.id).catch(() => null),
+          }))
         );
-        const receivedMapped = await Promise.all(
-          received.map(async (req) => {
-            const mapped = mapRequest(req, "PRESTADOR", categoryMap, requesterMap);
-            const state = await servifyApi.getAssignmentState(req.id).catch(() => null);
-            return applyAssignmentState(mapped, state);
-          })
+        const receivedStates = await Promise.all(
+          received.map(async (req) => ({
+            requestId: req.id,
+            state: await servifyApi.getAssignmentState(req.id).catch(() => null),
+          }))
         );
-        setApiRequests(ownMapped);
-        setApiReceived(receivedMapped);
+        const providerMap = await buildProfileNameMap(collectProviderIds(received, ownStates, receivedStates));
+        const ownStateMap = new Map(ownStates.map((entry) => [entry.requestId, entry.state]));
+        const receivedStateMap = new Map(receivedStates.map((entry) => [entry.requestId, entry.state]));
+        const ownMapped = own.map((req) => {
+          const mapped = mapRequest(req, "SOLICITANTE", categoryMap, requesterMap);
+          return applyAssignmentState(mapped, ownStateMap.get(req.id) ?? null, providerMap);
+        });
+        const receivedMapped = received.map((req) => {
+          const mapped = mapRequest(req, "PRESTADOR", categoryMap, requesterMap);
+          return applyAssignmentState(mapped, receivedStateMap.get(req.id) ?? null, providerMap);
+        });
+        setApiRequests(sortRequestsForDisplay(ownMapped));
+        setApiReceived(sortRequestsForDisplay(receivedMapped));
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "No se pudieron cargar las solicitudes");
@@ -104,14 +115,26 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
 
   useEffect(() => {
     void loadRequests();
-  }, [loadRequests]);
+    if (!userId) return;
+
+    const intervalId = window.setInterval(() => {
+      void loadRequests();
+    }, 8000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadRequests, userId]);
 
   const tabs: { id: RequestTab; label: string }[] = [
     { id: "my-requests", label: "Mis pedidos" },
     { id: "my-proposals", label: "Mis propuestas" },
   ];
 
-  const data = tab === "my-requests" ? apiRequests : apiReceived;
+  const data = useMemo(
+    () => sortRequestsForDisplay(tab === "my-requests" ? apiRequests : apiReceived),
+    [apiRequests, apiReceived, tab]
+  );
 
   const handleDistributionResponse = async (req: ServiceRequest, tipoRespuesta: "ACEPTAR" | "RECHAZAR") => {
     if (!userId || !req.distributionId) {
@@ -127,6 +150,9 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
         tipoRespuesta,
       });
       await loadRequests();
+      if (tipoRespuesta === "ACEPTAR") {
+        onRequestPress({ ...req, rawStatus: "ACEPTADA", status: "in-progress", providerId: userId });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo responder la solicitud");
     } finally {
@@ -319,6 +345,17 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                 <Chip label={req.modal} color="#7c3aed" bg="#f5f3ff" />
               </div>
 
+              {req.viewerRole === "SOLICITANTE" && req.providerName ? (
+                <div className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                  <div className="flex items-center justify-center rounded-full" style={{ width: 24, height: 24, background: "#dcfce7", flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: "#16a34a" }}>{req.providerInitials}</span>
+                  </div>
+                  <span style={{ fontSize: 12, color: "#166534", fontWeight: 800 }}>
+                    Prestador: {req.providerName}
+                  </span>
+                </div>
+              ) : null}
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1">
@@ -494,12 +531,7 @@ function mapRequest(
     date: date ? new Date(date).toLocaleDateString("es-AR") : "Sin fecha",
     status: toUiStatus(rawStatus),
     requesterName,
-    requesterInitials: requesterName
-      .split(" ")
-      .map((chunk) => chunk[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase(),
+    requesterInitials: initialsFromName(requesterName),
     modal: fromApiModality(req.modalidadServicio),
     locality,
     availabilityDay: req.disponibilidadRequerida?.diaSemana,
@@ -531,13 +563,31 @@ function toUiStatus(status?: string): ServiceRequest["status"] {
   return "open";
 }
 
-function applyAssignmentState(req: ServiceRequest, state: AssignmentState | null): ServiceRequest {
+function applyAssignmentState(
+  req: ServiceRequest,
+  state: AssignmentState | null,
+  providerMap: Map<string, string> = new Map()
+): ServiceRequest {
   if (!state) return req;
 
   const acceptedCount = state.distribucionesAceptadas?.length ?? 0;
   const counterOfferCount = state.contraofertasPendientes?.length ?? 0;
   const activeCount = state.distribucionesActivas ?? 0;
   const proposals = Math.max(req.proposals, acceptedCount, counterOfferCount, activeCount);
+  const providerId =
+    state.asignacion?.prestadorId ??
+    state.distribucionesAceptadas?.[0]?.prestadorId ??
+    state.contraofertasPendientes?.[0]?.prestadorId ??
+    req.providerId;
+  const providerName = providerId ? providerMap.get(providerId) ?? "Prestador asignado" : req.providerName;
+  const providerInitials = providerName ? initialsFromName(providerName) : req.providerInitials;
+  const withProvider = {
+    ...req,
+    proposals,
+    providerId,
+    providerName,
+    providerInitials,
+  };
   const nextRawStatus =
     state.asignacion?.estado ??
     state.distribucionesAceptadas?.[0]?.estado ??
@@ -546,18 +596,18 @@ function applyAssignmentState(req: ServiceRequest, state: AssignmentState | null
     req.rawStatus;
 
   if (state.finalizacionConfirmada || state.estadoSolicitud === "FINALIZADA" || state.asignacion?.estado === "FINALIZADA") {
-    return { ...req, proposals, rawStatus: nextRawStatus, status: "completed" };
+    return { ...withProvider, rawStatus: nextRawStatus, status: "completed" };
   }
 
   if (state.asignacion || acceptedCount > 0 || state.estadoSolicitud === "ASIGNADA") {
-    return { ...req, proposals, rawStatus: nextRawStatus, status: "in-progress" };
+    return { ...withProvider, rawStatus: nextRawStatus, status: "in-progress" };
   }
 
   if (counterOfferCount > 0) {
-    return { ...req, proposals, rawStatus: nextRawStatus, status: "counter-offer" };
+    return { ...withProvider, rawStatus: nextRawStatus, status: "counter-offer" };
   }
 
-  return { ...req, proposals, rawStatus: nextRawStatus };
+  return { ...withProvider, rawStatus: nextRawStatus };
 }
 
 function canProviderRespond(req: ServiceRequest): boolean {
@@ -770,6 +820,50 @@ async function buildRequesterMap(
   return map;
 }
 
+async function buildProfileNameMap(ids: string[]): Promise<Map<string, string>> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  const profiles = await Promise.all(
+    uniqueIds.map(async (id) => ({
+      id,
+      profile: await servifyApi.getUserProfile(id).catch(() => null),
+    }))
+  );
+  const map = new Map<string, string>();
+  profiles.forEach(({ id, profile }) => {
+    const name = formatProfileName(profile);
+    if (name) map.set(id, name);
+  });
+  return map;
+}
+
+function collectProviderIds(
+  received: ApiReceivedRequest[],
+  ownStates: { state: AssignmentState | null }[],
+  receivedStates: { state: AssignmentState | null }[]
+): string[] {
+  const stateProviderIds = [...ownStates, ...receivedStates].flatMap(({ state }) => [
+    state?.asignacion?.prestadorId,
+    state?.distribucionesAceptadas?.[0]?.prestadorId,
+    state?.contraofertasPendientes?.[0]?.prestadorId,
+  ]);
+  return [
+    ...received.map((req) => req.prestadorId),
+    ...stateProviderIds,
+  ].filter((id): id is string => Boolean(id));
+}
+
+function sortRequestsForDisplay(items: ServiceRequest[]): ServiceRequest[] {
+  return [...items].sort((a, b) => requestStatusPriority(a) - requestStatusPriority(b));
+}
+
+function requestStatusPriority(req: ServiceRequest): number {
+  if (req.status === "in-progress") return 0;
+  if (req.status === "counter-offer") return 1;
+  if (req.status === "open") return 2;
+  if (req.status === "completed") return 3;
+  return 4;
+}
+
 function buildCategoryMap(categories: ApiCategory[]): Map<string, string> {
   return new Map(categories.map((category) => [category.id, category.nombre]));
 }
@@ -778,4 +872,13 @@ function formatProfileName(profile: ApiUserProfile | null): string {
   if (!profile) return "";
   const parts = [profile.nombre, profile.apellido].filter(Boolean);
   return parts.join(" ").trim();
+}
+
+function initialsFromName(name: string): string {
+  return name
+    .split(" ")
+    .map((chunk) => chunk[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }

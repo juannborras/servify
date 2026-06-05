@@ -64,6 +64,7 @@ import com.servify.solicitudes.application.port.in.ActualizarSolicitudServicioUs
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarFinalizacionServicioUseCase;
+import com.servify.solicitudes.application.port.in.ConsultarCalificacionServicioUseCase;
 import com.servify.solicitudes.application.port.in.CrearSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.EmitirContraofertaUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesDelSolicitanteUseCase;
@@ -87,6 +88,7 @@ import com.servify.solicitudes.application.service.ActualizarSolicitudServicioSe
 import com.servify.solicitudes.application.service.CancelarSolicitudServicioService;
 import com.servify.solicitudes.application.service.ConfirmarAsignacionSolicitudService;
 import com.servify.solicitudes.application.service.ConfirmarFinalizacionServicioService;
+import com.servify.solicitudes.application.service.ConsultarCalificacionServicioService;
 import com.servify.solicitudes.application.service.CrearSolicitudServicioService;
 import com.servify.solicitudes.application.service.DistribuidorSolicitudService;
 import com.servify.solicitudes.application.service.EmitirContraofertaService;
@@ -547,6 +549,13 @@ public class MvpUseCaseConfiguration {
                 asignacionServicioRepositoryPort,
                 politicaCalificacion
         );
+    }
+
+    @Bean
+    ConsultarCalificacionServicioUseCase consultarCalificacionServicioUseCase(
+            CalificacionRepositoryPort calificacionRepositoryPort
+    ) {
+        return new ConsultarCalificacionServicioService(calificacionRepositoryPort);
     }
 
     @Bean

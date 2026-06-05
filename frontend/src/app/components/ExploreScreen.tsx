@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, ChevronRight, ArrowRight, Bell, RefreshCcw, X, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import { motion } from "motion/react";
 import { servifyApi, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
+import type { ServiceRequest } from "./RequestsScreen";
 
 const categories = [
   { id: 1, label: "Oficios", emoji: "🔧", color: "#0891b2", bg: "#f0f9ff" },
@@ -19,9 +20,10 @@ interface ExploreScreenProps {
   userName: string;
   onCreateRequest: () => void;
   onCategoryPress: (cat: string) => void;
+  onAcceptedRequest?: (request: ServiceRequest) => void;
 }
 
-export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress }: ExploreScreenProps & { user?: SessionUser | null }) {
+export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress, onAcceptedRequest }: ExploreScreenProps & { user?: SessionUser | null }) {
   const [search, setSearch] = useState("");
   const firstName = userName.split(" ")[0];
   const [remoteRequests, setRemoteRequests] = useState<ApiReceivedRequest[] | null>(null);
@@ -112,6 +114,9 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
         tipoRespuesta,
       });
       await reloadReceivedRequests();
+      if (tipoRespuesta === "ACEPTAR") {
+        onAcceptedRequest?.(mapReceivedRequestForDetail(request, String(user.id)));
+      }
     } catch (err) {
       setActivityError(err instanceof Error ? err.message : "No se pudo responder la solicitud");
     } finally {
@@ -522,6 +527,38 @@ function statusLabel(request: ApiReceivedRequest): string {
   if (status === "CONTRAOFERTADA") return "Contraofertada";
   if (status === "EXPIRADA") return "Expirada";
   return "Pendiente";
+}
+
+function mapReceivedRequestForDetail(request: ApiReceivedRequest, providerId: string): ServiceRequest {
+  const description = request.descripcionNecesidad ?? "Solicitud de servicio";
+  const requesterName = "Solicitante";
+  const locality = request.ubicacion?.localidad || request.ubicacion?.ciudad || "CABA";
+  const availability = request.disponibilidadRequerida;
+  return {
+    id: request.id,
+    viewerRole: "PRESTADOR",
+    title: description.split(".")[0] || "Solicitud de servicio",
+    description,
+    category: "Servicio solicitado",
+    location: locality,
+    proposals: 1,
+    price: request.precioReferencia ? `$${request.precioReferencia}` : "A convenir",
+    schedule: availability
+      ? `${availability.diaSemana} ${availability.horaDesde.slice(0, 5)}-${availability.horaHasta.slice(0, 5)}`
+      : "Horario a coordinar",
+    date: request.fechaSolicitud ? new Date(request.fechaSolicitud).toLocaleDateString("es-AR") : "Sin fecha",
+    status: "in-progress",
+    requesterName,
+    requesterInitials: "SO",
+    modal: request.modalidadServicio === "VIRTUAL" ? "Virtual" : request.modalidadServicio === "MIXTA" ? "Ambas" : "Presencial",
+    locality,
+    availabilityDay: availability?.diaSemana,
+    availabilityFrom: availability?.horaDesde?.slice(0, 5),
+    availabilityTo: availability?.horaHasta?.slice(0, 5),
+    distributionId: request.distribucionSolicitudId,
+    providerId,
+    rawStatus: "ACEPTADA",
+  };
 }
 
 function ActivityRow({ title, detail, tone }: ActivityItem) {

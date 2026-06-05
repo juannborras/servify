@@ -213,6 +213,14 @@ class MvpHttpFlowTests {
                 """.formatted(asignacionId, solicitanteId, prestadorId, solicitanteId)))
                 .andExpect(status().isCreated());
 
+        JsonNode calificacionSolicitante = responseJson(getPath(
+                "/api/v1/solicitudes/" + solicitudId
+                        + "/calificaciones?asignacionServicioId=" + asignacionId
+                        + "&rolCalificador=SOLICITANTE"
+        ));
+        assertEquals(5, calificacionSolicitante.get("puntaje").asInt());
+        assertEquals("SOLICITANTE", calificacionSolicitante.get("rolCalificador").asText());
+
         mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/calificaciones", """
                 {
                   "asignacionServicioId": "%s",

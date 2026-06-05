@@ -7,6 +7,7 @@ import com.servify.shared.infrastructure.web.MvpWebMapper;
 import com.servify.solicitudes.application.dto.ActualizarSolicitudServicioCommand;
 import com.servify.solicitudes.application.dto.AsignacionServicioResult;
 import com.servify.solicitudes.application.dto.CalificarServicioCommand;
+import com.servify.solicitudes.application.dto.CalificacionServicioResult;
 import com.servify.solicitudes.application.dto.CancelarSolicitudServicioCommand;
 import com.servify.solicitudes.application.dto.ConfirmarAsignacionSolicitudCommand;
 import com.servify.solicitudes.application.dto.ConfirmarFinalizacionServicioCommand;
@@ -26,6 +27,7 @@ import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarFinalizacionServicioUseCase;
+import com.servify.solicitudes.application.port.in.ConsultarCalificacionServicioUseCase;
 import com.servify.solicitudes.application.port.in.CrearSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.EmitirContraofertaUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesDelSolicitanteUseCase;
@@ -48,6 +50,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -65,6 +68,7 @@ public class SolicitudesApiController {
     private final ConfirmarAsignacionSolicitudUseCase confirmarAsignacionSolicitudUseCase;
     private final ConfirmarFinalizacionServicioUseCase confirmarFinalizacionServicioUseCase;
     private final CalificarServicioUseCase calificarServicioUseCase;
+    private final ConsultarCalificacionServicioUseCase consultarCalificacionServicioUseCase;
     private final CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase;
     private final ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase;
     private final ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase;
@@ -81,6 +85,7 @@ public class SolicitudesApiController {
             ConfirmarAsignacionSolicitudUseCase confirmarAsignacionSolicitudUseCase,
             ConfirmarFinalizacionServicioUseCase confirmarFinalizacionServicioUseCase,
             CalificarServicioUseCase calificarServicioUseCase,
+            ConsultarCalificacionServicioUseCase consultarCalificacionServicioUseCase,
             CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase,
             ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase,
             ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase
@@ -96,6 +101,7 @@ public class SolicitudesApiController {
         this.confirmarAsignacionSolicitudUseCase = confirmarAsignacionSolicitudUseCase;
         this.confirmarFinalizacionServicioUseCase = confirmarFinalizacionServicioUseCase;
         this.calificarServicioUseCase = calificarServicioUseCase;
+        this.consultarCalificacionServicioUseCase = consultarCalificacionServicioUseCase;
         this.cancelarSolicitudServicioUseCase = cancelarSolicitudServicioUseCase;
         this.obtenerEstadoAsignacionSolicitudUseCase = obtenerEstadoAsignacionSolicitudUseCase;
         this.reintentarDistribucionSolicitudUseCase = reintentarDistribucionSolicitudUseCase;
@@ -268,6 +274,18 @@ public class SolicitudesApiController {
                 )
         );
         return ResponseEntity.created(URI.create("/api/v1/solicitudes/" + solicitudId + "/calificaciones")).build();
+    }
+
+    @GetMapping("/solicitudes/{solicitudId}/calificaciones")
+    public ResponseEntity<CalificacionServicioResult> obtenerCalificacion(
+            @PathVariable UUID solicitudId,
+            @RequestParam UUID asignacionServicioId,
+            @RequestParam RolConfirmante rolCalificador
+    ) {
+        return consultarCalificacionServicioUseCase
+                .obtenerPorAsignacionYRol(solicitudId, asignacionServicioId, rolCalificador)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/solicitudes/{solicitudId}")

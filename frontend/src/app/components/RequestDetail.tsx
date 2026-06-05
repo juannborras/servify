@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
   MapPin,
@@ -15,7 +15,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { SessionUser } from "../api";
+import type { ApiServiceRating, ApiUserProfile, SessionUser } from "../api";
 import { formatMoney, servifyApi } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
 
@@ -27,6 +27,7 @@ export interface RatingTarget {
   prestadorId: string;
   calificadorId: string;
   rolCalificador: "SOLICITANTE" | "PRESTADOR";
+  onSubmitted?: (puntaje: number) => void;
 }
 
 interface RequestDetailProps {
@@ -49,10 +50,48 @@ type AssignmentState = Awaited<ReturnType<typeof servifyApi.getAssignmentState>>
 
 export function RequestDetail({ request, onBack, onRate, currentUser }: RequestDetailProps) {
   const [assignmentState, setAssignmentState] = useState<AssignmentState | null>(null);
+  const [providerProfileName, setProviderProfileName] = useState("");
+  const [existingRating, setExistingRating] = useState<ApiServiceRating | null>(null);
+  const [loadingRating, setLoadingRating] = useState(false);
   const [loadingState, setLoadingState] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [error, setError] = useState("");
+
+  const applyLoadedAssignmentState = useCallback((state: AssignmentState) => {
+    setAssignmentState(state);
+    setShowComplete(isServiceClosed(state));
+  }, []);
+
+  const loadAssignmentState = useCallback(
+    async (silent = false) => {
+      if (typeof request.id !== "string") {
+        setAssignmentState(null);
+        setShowComplete(false);
+        return null;
+      }
+
+      if (!silent) {
+        setLoadingState(true);
+      }
+      setError("");
+
+      try {
+        const state = await servifyApi.getAssignmentState(request.id);
+        applyLoadedAssignmentState(state);
+        return state;
+      } catch (err) {
+        setAssignmentState(null);
+        setError(err instanceof Error ? err.message : "No se pudo cargar el estado del servicio");
+        return null;
+      } finally {
+        if (!silent) {
+          setLoadingState(false);
+        }
+      }
+    },
+    [applyLoadedAssignmentState, request.id]
+  );
 
   useEffect(() => {
     if (typeof request.id !== "string") {
@@ -61,46 +100,48 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
       return;
     }
 
-    let ignore = false;
-    setLoadingState(true);
-    setError("");
-
-    servifyApi
-      .getAssignmentState(request.id)
-      .then((state) => {
-        if (ignore) return;
-        setAssignmentState(state);
-        setShowComplete(
-          Boolean(state.finalizacionConfirmada) ||
-            state.estadoSolicitud === "FINALIZADA" ||
-            state.asignacion?.estado === "FINALIZADA"
-        );
-      })
-      .catch((err) => {
-        if (ignore) return;
-        setAssignmentState(null);
-        setError(err instanceof Error ? err.message : "No se pudo cargar el estado del servicio");
-      })
-      .finally(() => {
-        if (!ignore) setLoadingState(false);
-      });
+    void loadAssignmentState();
+    const intervalId = window.setInterval(() => {
+      void loadAssignmentState(true);
+    }, 6000);
 
     return () => {
-      ignore = true;
+      window.clearInterval(intervalId);
     };
-  }, [request.id]);
+  }, [loadAssignmentState, request.id]);
 
   const assignment = assignmentState?.asignacion;
   const acceptedDistribution = assignmentState?.distribucionesAceptadas?.[0];
   const pendingCounterOffer = assignmentState?.contraofertasPendientes?.[0];
   const providerId = assignment?.prestadorId ?? acceptedDistribution?.prestadorId ?? pendingCounterOffer?.prestadorId ?? "";
-  const providerName = providerId ? `Prestador ${providerId.slice(0, 6)}` : proposalData.providerName;
-  const providerInitials = providerName
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+
+  useEffect(() => {
+    if (!providerId) {
+      setProviderProfileName("");
+      return;
+    }
+
+    let ignore = false;
+    setProviderProfileName("");
+
+    servifyApi
+      .getUserProfile(providerId)
+      .then((profile) => {
+        if (!ignore) setProviderProfileName(formatProfileName(profile));
+      })
+      .catch(() => {
+        if (!ignore) setProviderProfileName("");
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [providerId]);
+
+  const providerName = providerProfileName || request.providerName || (providerId ? "Prestador asignado" : proposalData.providerName);
+  const providerInitials = providerProfileName || request.providerName
+    ? initialsFromName(providerName)
+    : request.providerInitials || initialsFromName(providerName);
   const proposalMessage = assignment?.estado
     ? `Estado de asignación: ${assignment.estado}`
     : proposalData.message;
@@ -109,26 +150,49 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   const providerConfirmed = assignmentCompleted || (assignmentState?.confirmadoPorPrestador ?? false);
   const isCompleted = request.status === "completed" || assignmentCompleted || Boolean(assignmentState?.finalizacionConfirmada);
   const hasProposal = Boolean(assignment);
-  const hasAcceptedPending = !assignment && Boolean(acceptedDistribution?.id);
+  const hasAcceptedPending = !assignment && isAcceptedDistribution(acceptedDistribution);
   const hasPendingCounterOffer = !assignment && Boolean(pendingCounterOffer?.id);
-  const confirmationRole = request.viewerRole;
+  const isRequesterParticipant = Boolean(currentUser?.id && assignmentState?.solicitanteId === currentUser.id);
+  const isAssignedProvider = Boolean(currentUser?.id && assignment?.prestadorId === currentUser.id);
+  const isAcceptedProvider = Boolean(currentUser?.id && acceptedDistribution?.prestadorId === currentUser.id);
+  const isCounterOfferProvider = Boolean(currentUser?.id && pendingCounterOffer?.prestadorId === currentUser.id);
+  const hasProviderParticipation = isAssignedProvider || isAcceptedProvider || isCounterOfferProvider;
+  const participantRole: "SOLICITANTE" | "PRESTADOR" | null = request.viewerRole === "SOLICITANTE" && isRequesterParticipant
+    ? "SOLICITANTE"
+    : request.viewerRole === "PRESTADOR" && hasProviderParticipation
+    ? "PRESTADOR"
+    : isRequesterParticipant
+    ? "SOLICITANTE"
+    : hasProviderParticipation
+    ? "PRESTADOR"
+    : null;
+  const confirmationRole: "SOLICITANTE" | "PRESTADOR" | null = assignment
+    ? isRequesterParticipant
+      ? "SOLICITANTE"
+      : isAssignedProvider
+      ? "PRESTADOR"
+      : null
+    : null;
+  const currentUserAlreadyConfirmed = confirmationRole === "SOLICITANTE"
+    ? requesterConfirmed
+    : confirmationRole === "PRESTADOR"
+    ? providerConfirmed
+    : false;
   const acceptedPrice = assignment?.precioAcordado ? formatMoney(Number(assignment.precioAcordado)) : proposalData.offeredPrice;
   const counterOfferPrice = pendingCounterOffer?.precioPropuesto
     ? formatMoney(Number(pendingCounterOffer.precioPropuesto))
     : proposalData.offeredPrice;
-  const canConfirm = Boolean(currentUser?.id && assignment?.id && confirmationRole && !isCompleted && !submitting);
+  const canConfirm = Boolean(currentUser?.id && assignment?.id && confirmationRole && !currentUserAlreadyConfirmed && !isCompleted && !submitting);
   const canResolveCounterOffer = Boolean(
     currentUser?.id &&
       pendingCounterOffer?.id &&
-      request.viewerRole === "SOLICITANTE" &&
-      assignmentState?.solicitanteId === currentUser.id &&
+      isRequesterParticipant &&
       !submitting
   );
   const canConfirmAssignment = Boolean(
     currentUser?.id &&
       acceptedDistribution?.id &&
-      request.viewerRole === "SOLICITANTE" &&
-      assignmentState?.solicitanteId === currentUser.id &&
+      isRequesterParticipant &&
       !submitting
   );
   const bothConfirmed = requesterConfirmed && providerConfirmed;
@@ -138,9 +202,44 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
       assignment?.prestadorId &&
       currentUser?.id &&
       confirmationRole &&
-      isCompleted
+      isCompleted &&
+      !loadingRating &&
+      !existingRating
   );
   const ratingTargetName = confirmationRole === "PRESTADOR" ? request.requesterName : providerName;
+  const ratingTargetLabel = confirmationRole === "PRESTADOR" ? "cliente" : "prestador";
+
+  useEffect(() => {
+    if (!assignment?.id || !confirmationRole || !currentUser?.id || typeof request.id !== "string" || !isCompleted) {
+      setExistingRating(null);
+      setLoadingRating(false);
+      return;
+    }
+
+    let ignore = false;
+    setLoadingRating(true);
+
+    servifyApi
+      .getServiceRating({
+        solicitudId: request.id,
+        asignacionServicioId: assignment.id,
+        rolCalificador: confirmationRole,
+      })
+      .then((rating) => {
+        if (ignore) return;
+        setExistingRating(rating.calificadorId && rating.calificadorId !== currentUser.id ? null : rating);
+      })
+      .catch(() => {
+        if (!ignore) setExistingRating(null);
+      })
+      .finally(() => {
+        if (!ignore) setLoadingRating(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [assignment?.id, confirmationRole, currentUser?.id, isCompleted, request.id]);
 
   const handleConfirmAssignment = async () => {
     if (!currentUser?.id || !acceptedDistribution?.id) return;
@@ -153,13 +252,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
         distribucionSolicitudId: acceptedDistribution.id,
         solicitanteId: currentUser.id,
       });
-      const updated = await servifyApi.getAssignmentState(String(request.id));
-      setAssignmentState(updated);
-      setShowComplete(
-        Boolean(updated.finalizacionConfirmada) ||
-          updated.estadoSolicitud === "FINALIZADA" ||
-          updated.asignacion?.estado === "FINALIZADA"
-      );
+      await loadAssignmentState(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo confirmar el prestador");
     } finally {
@@ -186,13 +279,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
           solicitanteId: currentUser.id,
         });
       }
-      const updated = await servifyApi.getAssignmentState(String(request.id));
-      setAssignmentState(updated);
-      setShowComplete(
-        Boolean(updated.finalizacionConfirmada) ||
-          updated.estadoSolicitud === "FINALIZADA" ||
-          updated.asignacion?.estado === "FINALIZADA"
-      );
+      await loadAssignmentState(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo resolver la contraoferta");
     } finally {
@@ -213,13 +300,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
         rolConfirmante: confirmationRole,
         observacion: "",
       });
-      const updated = await servifyApi.getAssignmentState(String(request.id));
-      setAssignmentState(updated);
-      setShowComplete(
-        Boolean(updated.finalizacionConfirmada) ||
-          updated.estadoSolicitud === "FINALIZADA" ||
-          updated.asignacion?.estado === "FINALIZADA"
-      );
+      await loadAssignmentState(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo confirmar la finalización");
     } finally {
@@ -300,7 +381,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
         </Card>
 
         {hasPendingCounterOffer && (
-          <Card title={request.viewerRole === "SOLICITANTE" ? "Contraoferta recibida" : "Contraoferta enviada"}>
+          <Card title={participantRole === "SOLICITANTE" ? "Contraoferta recibida" : "Contraoferta enviada"}>
             <div className="flex items-center gap-3 mb-3">
               <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#fff7ed", flexShrink: 0 }}>
                 <MessageSquare size={20} color="#ea580c" strokeWidth={2} />
@@ -308,7 +389,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               <div className="flex-1">
                 <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
                 <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {request.viewerRole === "SOLICITANTE"
+                  {participantRole === "SOLICITANTE"
                     ? "El prestador propuso nuevas condiciones para este pedido."
                     : "Esperando respuesta del solicitante."}
                 </p>
@@ -324,7 +405,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               </p>
             </div>
 
-            {request.viewerRole === "SOLICITANTE" && (
+            {participantRole === "SOLICITANTE" && (
               <div className="grid grid-cols-2 gap-2 mt-3">
                 <button
                   type="button"
@@ -352,7 +433,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
         )}
 
         {hasAcceptedPending && (
-          <Card title={request.viewerRole === "SOLICITANTE" ? "Prestador disponible" : "Aceptacion enviada"}>
+          <Card title={participantRole === "SOLICITANTE" ? "Prestador disponible" : "Aceptacion enviada"}>
             <div className="flex items-center gap-3 mb-3">
               <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#f0fdf4", flexShrink: 0 }}>
                 <span style={{ fontWeight: 800, fontSize: 14, color: "#16a34a" }}>{providerInitials}</span>
@@ -360,14 +441,14 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               <div className="flex-1">
                 <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
                 <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {request.viewerRole === "SOLICITANTE"
+                  {participantRole === "SOLICITANTE"
                     ? "Acepto tu solicitud. Confirmalo para iniciar el servicio."
                     : "Ya aceptaste esta solicitud. Falta que el solicitante confirme la asignacion."}
                 </p>
               </div>
             </div>
 
-            {request.viewerRole === "SOLICITANTE" && (
+            {participantRole === "SOLICITANTE" && (
               <button
                 type="button"
                 onClick={handleConfirmAssignment}
@@ -479,6 +560,32 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               <p style={{ fontWeight: 700, fontSize: 15, color: "#15803d", textAlign: "center" }}>
                 Servicio completado con confirmación de ambas partes
               </p>
+              {loadingRating && confirmationRole && (
+                <p style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
+                  Revisando tu calificacion...
+                </p>
+              )}
+              {existingRating && (
+                <div className="w-full rounded-2xl px-4 py-3 flex flex-col items-center gap-2" style={{ background: "#fff7ed", border: "1.5px solid #fed7aa" }}>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <Star
+                        key={value}
+                        size={18}
+                        color={value <= existingRating.puntaje ? "#f59e0b" : "#fdba74"}
+                        fill={value <= existingRating.puntaje ? "#f59e0b" : "none"}
+                        strokeWidth={1.8}
+                      />
+                    ))}
+                  </div>
+                  <p style={{ fontWeight: 800, fontSize: 14, color: "#c2410c", textAlign: "center" }}>
+                    Ya calificaste a este {ratingTargetLabel}
+                  </p>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "#9a3412" }}>
+                    Tu calificacion: {existingRating.puntaje}/5
+                  </p>
+                </div>
+              )}
               {canRate && (
                 <button
                   onClick={() =>
@@ -490,6 +597,19 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
                       prestadorId: assignment?.prestadorId ?? "",
                       calificadorId: currentUser?.id ?? "",
                       rolCalificador: confirmationRole as "SOLICITANTE" | "PRESTADOR",
+                      onSubmitted: (puntaje) => {
+                        setExistingRating({
+                          solicitudId: String(request.id),
+                          asignacionServicioId: assignment?.id ?? "",
+                          calificadorId: currentUser?.id,
+                          calificadoId: confirmationRole === "PRESTADOR"
+                            ? assignmentState?.solicitanteId
+                            : assignment?.prestadorId,
+                          rolCalificador: confirmationRole as "SOLICITANTE" | "PRESTADOR",
+                          puntaje,
+                          fechaCalificacion: new Date().toISOString(),
+                        });
+                      },
                     })
                   }
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all active:scale-95"
@@ -614,4 +734,28 @@ function ConfirmationPill({
       </div>
     </div>
   );
+}
+
+function isServiceClosed(state: AssignmentState): boolean {
+  return Boolean(state.finalizacionConfirmada) ||
+    state.estadoSolicitud === "FINALIZADA" ||
+    state.asignacion?.estado === "FINALIZADA";
+}
+
+function isAcceptedDistribution(distribution: NonNullable<AssignmentState["distribucionesAceptadas"]>[number] | undefined): boolean {
+  return Boolean(distribution?.id && (!distribution.estado || distribution.estado === "ACEPTADA"));
+}
+
+function formatProfileName(profile: ApiUserProfile | null): string {
+  if (!profile) return "";
+  return [profile.nombre, profile.apellido].filter(Boolean).join(" ").trim();
+}
+
+function initialsFromName(name: string): string {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
