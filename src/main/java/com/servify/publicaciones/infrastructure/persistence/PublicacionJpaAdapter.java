@@ -154,6 +154,16 @@ public class PublicacionJpaAdapter implements PublicacionServicioRepositoryPort,
     }
 
     @Override
+    public List<PublicacionServicio> buscarPorEstado(EstadoPublicacion estado) {
+        if (estado == null) {
+            return publicacionRepo.findAll().stream().map(this::toPublicacionDomain).toList();
+        }
+        return publicacionRepo.findByEstado(estado.name().toLowerCase()).stream()
+                .map(this::toPublicacionDomain)
+                .toList();
+    }
+
+    @Override
     public List<PublicacionServicio> buscarActivasPorCategoria(UUID categoriaId) {
         return publicacionRepo.findAll().stream()
                 .filter(e -> "activa".equals(e.getEstado())

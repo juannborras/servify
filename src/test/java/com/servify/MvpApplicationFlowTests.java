@@ -340,6 +340,7 @@ class MvpApplicationFlowTests {
         );
         Usuario usuario = new Usuario(
                 usuarioId,
+                "legacy.publicador",
                 new Contacto("legacy-publicador@servify.test", null),
                 Rol.USUARIO,
                 EstadoUsuario.ACTIVO,
@@ -508,8 +509,21 @@ class MvpApplicationFlowTests {
         }
 
         @Override
+        public Optional<Usuario> buscarPorNombreUsuario(String nombreUsuario) {
+            return usuarios.values().stream()
+                    .filter(usuario -> usuario.getNombreUsuario() != null)
+                    .filter(usuario -> usuario.getNombreUsuario().equalsIgnoreCase(nombreUsuario))
+                    .findFirst();
+        }
+
+        @Override
         public boolean existePorEmail(String email) {
             return buscarPorEmail(email).isPresent();
+        }
+
+        @Override
+        public boolean existePorNombreUsuario(String nombreUsuario) {
+            return buscarPorNombreUsuario(nombreUsuario).isPresent();
         }
 
         @Override
@@ -1011,6 +1025,11 @@ class MvpApplicationFlowTests {
                     .map(Usuario::getContacto)
                     .map(contacto -> contacto.getEmail().equalsIgnoreCase(emailAcceso))
                     .orElse(false);
+        }
+
+        @Override
+        public Optional<UUID> buscarUsuarioIdPorNombreUsuario(String nombreUsuario) {
+            return usuarios.buscarPorNombreUsuario(nombreUsuario).map(Usuario::getId);
         }
     }
 

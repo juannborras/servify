@@ -1,7 +1,9 @@
 package com.servify.usuarios.infrastructure.web;
 
+import com.servify.administracion.infrastructure.web.AdminAuthorizationService;
 import com.servify.shared.domain.valueobject.Ubicacion;
 import com.servify.shared.infrastructure.web.MvpWebMapper;
+import com.servify.usuarios.application.dto.ActualizarCuentaUsuarioCommand;
 import com.servify.usuarios.application.dto.ActualizarPerfilUsuarioCommand;
 import com.servify.usuarios.application.dto.CambiarEstadoUsuarioCommand;
 import com.servify.usuarios.application.dto.ConfiguracionCuentaResult;
@@ -9,6 +11,7 @@ import com.servify.usuarios.application.dto.CrearUsuarioCommand;
 import com.servify.usuarios.application.dto.PerfilUsuarioResult;
 import com.servify.usuarios.application.dto.ReputacionUsuarioResult;
 import com.servify.usuarios.application.dto.UsuarioResult;
+import com.servify.usuarios.application.port.in.ActualizarCuentaUsuarioUseCase;
 import com.servify.usuarios.application.port.in.ActualizarPerfilUsuarioUseCase;
 import com.servify.usuarios.application.port.in.CambiarEstadoUsuarioUseCase;
 import com.servify.usuarios.application.port.in.CrearUsuarioUseCase;
@@ -18,6 +21,7 @@ import com.servify.usuarios.application.port.in.ObtenerPerfilUsuarioUseCase;
 import com.servify.usuarios.application.port.in.ObtenerReputacionUsuarioUseCase;
 import com.servify.usuarios.domain.enumtype.EstadoUsuario;
 import com.servify.usuarios.domain.enumtype.Rol;
+import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -38,7 +42,9 @@ public class UsuariosApiController {
 
     private final CrearUsuarioUseCase crearUsuarioUseCase;
     private final ListarUsuariosUseCase listarUsuariosUseCase;
+    private final ActualizarCuentaUsuarioUseCase actualizarCuentaUsuarioUseCase;
     private final ActualizarPerfilUsuarioUseCase actualizarPerfilUsuarioUseCase;
+    private final AdminAuthorizationService adminAuthorizationService;
     private final ObtenerPerfilUsuarioUseCase obtenerPerfilUsuarioUseCase;
     private final ObtenerConfiguracionCuentaUseCase obtenerConfiguracionCuentaUseCase;
     private final ObtenerReputacionUsuarioUseCase obtenerReputacionUsuarioUseCase;
@@ -47,7 +53,9 @@ public class UsuariosApiController {
     public UsuariosApiController(
             CrearUsuarioUseCase crearUsuarioUseCase,
             ListarUsuariosUseCase listarUsuariosUseCase,
+            ActualizarCuentaUsuarioUseCase actualizarCuentaUsuarioUseCase,
             ActualizarPerfilUsuarioUseCase actualizarPerfilUsuarioUseCase,
+            AdminAuthorizationService adminAuthorizationService,
             ObtenerPerfilUsuarioUseCase obtenerPerfilUsuarioUseCase,
             ObtenerConfiguracionCuentaUseCase obtenerConfiguracionCuentaUseCase,
             ObtenerReputacionUsuarioUseCase obtenerReputacionUsuarioUseCase,
@@ -55,7 +63,9 @@ public class UsuariosApiController {
     ) {
         this.crearUsuarioUseCase = crearUsuarioUseCase;
         this.listarUsuariosUseCase = listarUsuariosUseCase;
+        this.actualizarCuentaUsuarioUseCase = actualizarCuentaUsuarioUseCase;
         this.actualizarPerfilUsuarioUseCase = actualizarPerfilUsuarioUseCase;
+        this.adminAuthorizationService = adminAuthorizationService;
         this.obtenerPerfilUsuarioUseCase = obtenerPerfilUsuarioUseCase;
         this.obtenerConfiguracionCuentaUseCase = obtenerConfiguracionCuentaUseCase;
         this.obtenerReputacionUsuarioUseCase = obtenerReputacionUsuarioUseCase;
@@ -65,7 +75,7 @@ public class UsuariosApiController {
     @PostMapping
     public ResponseEntity<UsuarioResult> crearUsuario(@RequestBody CrearUsuarioRequest request) {
         UsuarioResult result = crearUsuarioUseCase.crear(
-                new CrearUsuarioCommand(request.email, request.telefono, request.rol)
+                new CrearUsuarioCommand(request.email, request.nombreUsuario, request.telefono, request.rol)
         );
         return ResponseEntity
                 .created(URI.create("/api/v1/usuarios/" + result.getId()))
@@ -74,8 +84,10 @@ public class UsuariosApiController {
 
     @GetMapping
     public ResponseEntity<List<UsuarioResult>> listarUsuarios(
-            @RequestParam(defaultValue = "ACTIVO") EstadoUsuario estado
+            @RequestParam(defaultValue = "ACTIVO") EstadoUsuario estado,
+            HttpServletRequest request
     ) {
+        adminAuthorizationService.requireAdmin(request);
         return ResponseEntity.ok(listarUsuariosUseCase.listarPorEstado(estado));
     }
 
@@ -121,18 +133,32 @@ public class UsuariosApiController {
     @PatchMapping("/{usuarioId}/estado")
     public ResponseEntity<Void> cambiarEstado(
             @PathVariable UUID usuarioId,
-            @RequestBody CambiarEstadoUsuarioRequest request
+            @RequestBody CambiarEstadoUsuarioRequest body,
+            HttpServletRequest request
     ) {
+        adminAuthorizationService.requireAdmin(request);
         cambiarEstadoUsuarioUseCase.cambiarEstado(
-                new CambiarEstadoUsuarioCommand(usuarioId, request.nuevoEstado)
+                new CambiarEstadoUsuarioCommand(usuarioId, body.nuevoEstado)
         );
         return ResponseEntity.noContent().build();
     }
 
     public static class CrearUsuarioRequest {
         public String email;
+        public String nombreUsuario;
         public String telefono;
         public Rol rol;
+    }
+
+    @PatchMapping("/{usuarioId}/cuenta")
+    public ResponseEntity<UsuarioResult> actualizarCuenta(
+            @PathVariable UUID usuarioId,
+            @RequestBody ActualizarCuentaRequest request
+    ) {
+        UsuarioResult result = actualizarCuentaUsuarioUseCase.actualizar(
+                new ActualizarCuentaUsuarioCommand(usuarioId, request.nombreUsuario)
+        );
+        return ResponseEntity.ok(result);
     }
 
     public static class ActualizarPerfilRequest {
@@ -142,6 +168,10 @@ public class UsuariosApiController {
         public String fotoPerfilUrl;
         public MvpWebMapper.UbicacionPayload ubicacion;
         public String descripcionPersonal;
+    }
+
+    public static class ActualizarCuentaRequest {
+        public String nombreUsuario;
     }
 
     public static class CambiarEstadoUsuarioRequest {

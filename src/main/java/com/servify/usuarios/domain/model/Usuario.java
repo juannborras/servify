@@ -21,6 +21,7 @@ import com.servify.usuarios.domain.valueobject.Contacto;
  */
 public class Usuario extends BaseEntity {
 
+    private String nombreUsuario;
     private Contacto contacto;
     private Rol rol;
     private EstadoUsuario estado;
@@ -35,6 +36,7 @@ public class Usuario extends BaseEntity {
      * Crea un usuario con contacto, rol, estado, validacion de identidad y perfil asociado.
      */
     public Usuario(UUID id,
+                   String nombreUsuario,
                    Contacto contacto,
                    Rol rol,
                    EstadoUsuario estado,
@@ -42,6 +44,7 @@ public class Usuario extends BaseEntity {
                    PerfilUsuario perfil,
                    LocalDateTime fechaRegistro) {
         super(id);
+        this.nombreUsuario = validarNombreUsuario(nombreUsuario);
         this.contacto = validarContacto(contacto);
         this.rol = validarRol(rol);
         this.estado = validarEstado(estado);
@@ -52,6 +55,14 @@ public class Usuario extends BaseEntity {
 
     public Rol getRol() {
         return rol;
+    }
+
+    public String getNombreUsuario() {
+        return nombreUsuario;
+    }
+
+    public void actualizarNombreUsuario(String nombreUsuario) {
+        this.nombreUsuario = validarNombreUsuario(nombreUsuario);
     }
 
     public void setRol(Rol rol) {
@@ -179,11 +190,7 @@ public class Usuario extends BaseEntity {
     }
 
     public void activar() {
-        // Cambia el estado a ACTIVO solo si la transicion es valida.
-        if (estaBloqueado()) {
-            throw new BusinessRuleException("No se puede activar un usuario bloqueado");
-        }
-
+        // Cambia el estado a ACTIVO. Esta transicion puede ser usada por administracion para reactivar cuentas.
         this.estado = EstadoUsuario.ACTIVO;
     }
 
@@ -206,6 +213,15 @@ public class Usuario extends BaseEntity {
         }
 
         return contacto;
+    }
+
+    private String validarNombreUsuario(String nombreUsuario) {
+        String normalizado = normalizarTextoObligatorio(nombreUsuario, "El nombre de usuario es obligatorio")
+                .toLowerCase();
+        if (!normalizado.matches("^[a-z0-9._-]{3,30}$")) {
+            throw new ValidationException("El nombre de usuario debe tener 3 a 30 caracteres y solo puede usar letras, numeros, punto, guion o guion bajo");
+        }
+        return normalizado;
     }
 
     private Rol validarRol(Rol rol) {

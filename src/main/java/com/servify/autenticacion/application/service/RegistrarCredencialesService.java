@@ -44,7 +44,7 @@ public class RegistrarCredencialesService implements RegistrarCredencialesUseCas
         validarUsuario(command.getUsuarioId(), command.getEmailAcceso());
 
         if (this.credencialAccesoRepositoryPort.existePorEmailAcceso(command.getEmailAcceso())) {
-            throw new IllegalArgumentException("El email de acceso ya está registrado");
+            throw new IllegalArgumentException("Ese email ya tiene un usuario registrado");
         }
 
         String hash = this.passwordHasherPort.hashear(command.getPasswordPlano());

@@ -11,6 +11,7 @@ public class UsuarioResult {
 
     private UUID id;
     private String email;
+    private String nombreUsuario;
     private String telefono;
     private Rol rol;
     private EstadoUsuario estado;
@@ -22,6 +23,7 @@ public class UsuarioResult {
 
     public UsuarioResult(UUID id,
                          String email,
+                         String nombreUsuario,
                          String telefono,
                          Rol rol,
                          EstadoUsuario estado,
@@ -29,6 +31,7 @@ public class UsuarioResult {
                          LocalDateTime fechaRegistro) {
         this.id = id;
         this.email = email;
+        this.nombreUsuario = nombreUsuario;
         this.telefono = telefono;
         this.rol = rol;
         this.estado = estado;
@@ -42,6 +45,10 @@ public class UsuarioResult {
 
     public String getEmail() {
         return email;
+    }
+
+    public String getNombreUsuario() {
+        return nombreUsuario;
     }
 
     public String getTelefono() {

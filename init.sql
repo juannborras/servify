@@ -544,6 +544,28 @@ CREATE TABLE public.medida_administrativa_usuario (
 ALTER TABLE public.medida_administrativa_usuario OWNER TO postgres;
 
 --
+-- Name: notificacion_usuario; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.notificacion_usuario (
+    id uuid NOT NULL,
+    usuario_id bigint NOT NULL,
+    tipo character varying(60) NOT NULL,
+    titulo character varying(140) NOT NULL,
+    mensaje character varying(800) NOT NULL,
+    referencia_tipo character varying(60),
+    referencia_id uuid,
+    leida boolean DEFAULT false NOT NULL,
+    fecha_creacion timestamp without time zone DEFAULT now() NOT NULL,
+    fecha_lectura timestamp without time zone,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.notificacion_usuario OWNER TO postgres;
+
+--
 -- TOC entry 222 (class 1259 OID 16430)
 -- Name: perfil_usuario; Type: TABLE; Schema: public; Owner: postgres
 --
@@ -764,6 +786,7 @@ ALTER SEQUENCE public.solicitud_servicio_id_seq OWNED BY public.solicitud_servic
 CREATE TABLE public.usuario (
     id bigint NOT NULL,
     email character varying(255) NOT NULL,
+    nombre_usuario character varying(50) NOT NULL,
     rol character varying(50) DEFAULT 'usuario' NOT NULL,
     estado character varying(50) DEFAULT 'activo' NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
@@ -982,6 +1005,14 @@ COPY public.medida_administrativa_usuario (id, usuario_id, administrador_id, tip
 
 
 --
+-- Data for Name: notificacion_usuario; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.notificacion_usuario (id, usuario_id, tipo, titulo, mensaje, referencia_tipo, referencia_id, leida, fecha_creacion, fecha_lectura, created_at, updated_at) FROM stdin;
+\.
+
+
+--
 -- TOC entry 5273 (class 0 OID 16430)
 -- Dependencies: 222
 -- Data for Name: perfil_usuario; Type: TABLE DATA; Schema: public; Owner: postgres
@@ -1027,7 +1058,7 @@ COPY public.solicitud_servicio (id, solicitante_id, categoria_id, descripcion, m
 -- Data for Name: usuario; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.usuario (id, email, rol, estado, created_at, updated_at, telefono, estado_validacion_identidad, fecha_registro) FROM stdin;
+COPY public.usuario (id, email, nombre_usuario, rol, estado, created_at, updated_at, telefono, estado_validacion_identidad, fecha_registro) FROM stdin;
 \.
 
 
@@ -1208,6 +1239,14 @@ ALTER TABLE ONLY public.distribucion_solicitud
 
 ALTER TABLE ONLY public.medida_administrativa_usuario
     ADD CONSTRAINT medida_administrativa_usuario_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notificacion_usuario notificacion_usuario_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notificacion_usuario
+    ADD CONSTRAINT notificacion_usuario_pkey PRIMARY KEY (id);
 
 
 --
@@ -1417,6 +1456,14 @@ ALTER TABLE ONLY public.usuario
 
 
 --
+-- Name: usuario uq_usuario_nombre_usuario; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario
+    ADD CONSTRAINT uq_usuario_nombre_usuario UNIQUE (nombre_usuario);
+
+
+--
 -- TOC entry 5026 (class 2606 OID 16424)
 -- Name: usuario usuario_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
@@ -1584,6 +1631,27 @@ CREATE INDEX idx_medida_usuario_id ON public.medida_administrativa_usuario USING
 
 
 --
+-- Name: idx_notificacion_fecha_creacion; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notificacion_fecha_creacion ON public.notificacion_usuario USING btree (fecha_creacion DESC);
+
+
+--
+-- Name: idx_notificacion_leida; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notificacion_leida ON public.notificacion_usuario USING btree (leida);
+
+
+--
+-- Name: idx_notificacion_usuario_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notificacion_usuario_id ON public.notificacion_usuario USING btree (usuario_id);
+
+
+--
 -- TOC entry 5027 (class 1259 OID 16457)
 -- Name: idx_perfil_completo; Type: INDEX; Schema: public; Owner: postgres
 --
@@ -1712,6 +1780,13 @@ CREATE INDEX idx_solicitud_solicitante ON public.solicitud_servicio USING btree 
 --
 
 CREATE INDEX idx_usuario_email ON public.usuario USING btree (email);
+
+
+--
+-- Name: idx_usuario_nombre_usuario; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_usuario_nombre_usuario ON public.usuario USING btree (nombre_usuario);
 
 
 --
@@ -1890,6 +1965,14 @@ ALTER TABLE ONLY public.medida_administrativa_usuario
 
 ALTER TABLE ONLY public.medida_administrativa_usuario
     ADD CONSTRAINT fk_medida_usuario FOREIGN KEY (usuario_id) REFERENCES public.usuario(id);
+
+
+--
+-- Name: notificacion_usuario fk_notificacion_usuario; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notificacion_usuario
+    ADD CONSTRAINT fk_notificacion_usuario FOREIGN KEY (usuario_id) REFERENCES public.usuario(id) ON DELETE CASCADE;
 
 
 --

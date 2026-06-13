@@ -11,11 +11,13 @@ import com.servify.autenticacion.application.port.out.TokenProviderPort;
 import com.servify.autenticacion.application.port.out.UsuarioAutenticablePort;
 import com.servify.autenticacion.domain.model.CredencialAcceso;
 import com.servify.autenticacion.domain.model.RefreshToken;
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 public class IniciarSesionService implements IniciarSesionUseCase {
+
+    private static final String MENSAJE_CUENTA_INEXISTENTE =
+            "No existe una cuenta registrada con ese email o nombre de usuario";
 
     private final CredencialAccesoRepositoryPort credencialAccesoRepositoryPort;
     private final PasswordHasherPort passwordHasherPort;
@@ -41,15 +43,15 @@ public class IniciarSesionService implements IniciarSesionUseCase {
             throw new IllegalArgumentException("El comando no puede ser nulo");
         }
         if (command.getEmailAcceso() == null || command.getEmailAcceso().trim().isEmpty()) {
-            throw new IllegalArgumentException("emailAcceso no puede ser nulo o vacío");
+            throw new IllegalArgumentException("Ingresa tu email o nombre de usuario");
         }
         if (command.getPasswordPlano() == null || command.getPasswordPlano().trim().isEmpty()) {
-            throw new IllegalArgumentException("password no puede ser nulo o vacío");
+            throw new IllegalArgumentException("Ingresa tu contrasena");
         }
 
         CredencialAcceso credencial = obtenerCredencial(command.getEmailAcceso());
         if (!credencial.estaHabilitada()) {
-            throw new IllegalStateException("La credencial no está habilitada");
+            throw new IllegalStateException("La credencial no esta habilitada");
         }
         if (!usuarioAutenticablePort.puedeAutenticarse(credencial.getUsuarioId())) {
             throw new IllegalStateException("El usuario no puede autenticarse");
@@ -73,12 +75,21 @@ public class IniciarSesionService implements IniciarSesionUseCase {
         return construirResultado(credencial, access, refresh, ahora);
     }
 
-    protected CredencialAcceso obtenerCredencial(String emailAcceso) {
-        if (emailAcceso == null || emailAcceso.trim().isEmpty()) {
-            throw new IllegalArgumentException("emailAcceso no puede ser nulo o vacío");
+    protected CredencialAcceso obtenerCredencial(String identificadorAcceso) {
+        if (identificadorAcceso == null || identificadorAcceso.trim().isEmpty()) {
+            throw new IllegalArgumentException("Ingresa tu email o nombre de usuario");
         }
-        return this.credencialAccesoRepositoryPort.buscarPorEmailAcceso(emailAcceso)
-                .orElseThrow(() -> new IllegalArgumentException("Credencial no encontrada para email: " + emailAcceso));
+
+        String identificadorNormalizado = identificadorAcceso.trim();
+        if (identificadorNormalizado.contains("@")) {
+            return this.credencialAccesoRepositoryPort.buscarPorEmailAcceso(identificadorNormalizado)
+                    .orElseThrow(() -> new IllegalArgumentException(MENSAJE_CUENTA_INEXISTENTE));
+        }
+
+        UUID usuarioId = usuarioAutenticablePort.buscarUsuarioIdPorNombreUsuario(identificadorNormalizado)
+                .orElseThrow(() -> new IllegalArgumentException(MENSAJE_CUENTA_INEXISTENTE));
+        return this.credencialAccesoRepositoryPort.buscarPorUsuarioId(usuarioId)
+                .orElseThrow(() -> new IllegalArgumentException(MENSAJE_CUENTA_INEXISTENTE));
     }
 
     protected void validarCredencialYPassword(CredencialAcceso credencialAcceso,
@@ -87,7 +98,7 @@ public class IniciarSesionService implements IniciarSesionUseCase {
             throw new IllegalArgumentException("Credencial no puede ser nula");
         }
         if (passwordPlano == null) {
-            throw new IllegalArgumentException("password no puede ser nulo");
+            throw new IllegalArgumentException("Ingresa tu contrasena");
         }
         LocalDateTime ahora = obtenerFechaActual();
         boolean coincide = this.passwordHasherPort.coincide(passwordPlano, credencialAcceso.getPasswordHash());
@@ -95,7 +106,7 @@ public class IniciarSesionService implements IniciarSesionUseCase {
             credencialAcceso.registrarAccesoExitoso(ahora);
         } else {
             credencialAcceso.registrarIntentoFallido();
-            throw new IllegalArgumentException("Credenciales inválidas");
+            throw new IllegalArgumentException("Contrasena incorrecta");
         }
     }
 
@@ -122,12 +133,12 @@ public class IniciarSesionService implements IniciarSesionUseCase {
                                               TokenResult refreshToken,
                                               LocalDateTime fechaInicioSesion) {
         return SesionResult.builder()
-            .usuarioId(credencialAcceso.getUsuarioId())
-            .emailAcceso(credencialAcceso.getEmailAcceso())
-            .accessToken(accessToken)
-            .refreshToken(refreshToken)
-            .fechaInicioSesion(fechaInicioSesion)
-            .build();
+                .usuarioId(credencialAcceso.getUsuarioId())
+                .emailAcceso(credencialAcceso.getEmailAcceso())
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .fechaInicioSesion(fechaInicioSesion)
+                .build();
     }
 
     protected UUID generarIdRefreshToken() {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronRight, ArrowRight, Bell, RefreshCcw, X, CheckCircle, XCircle, MessageSquare } from "lucide-react";
+import { Search, ChevronRight, ArrowRight, Bell, RefreshCcw, X, CheckCircle, XCircle, MessageSquare, UserRound } from "lucide-react";
 import { motion } from "motion/react";
-import { servifyApi, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
+import { servifyApi, type ApiNotification, type ApiPublicProvider, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
 
 const categories = [
@@ -16,20 +16,23 @@ const categories = [
   { id: 9, label: "Otro", emoji: "🌟", color: "#7c3aed", bg: "#f5f3ff" },
 ];
 
+const popularCategories = new Set(["Oficios", "Clases particulares", "Soporte técnico"]);
+
 interface ExploreScreenProps {
   userName: string;
   onCreateRequest: () => void;
   onCategoryPress: (cat: string) => void;
   onAcceptedRequest?: (request: ServiceRequest) => void;
+  onProviderPress: (provider: ApiPublicProvider) => void;
 }
 
-export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress, onAcceptedRequest }: ExploreScreenProps & { user?: SessionUser | null }) {
-  const [search, setSearch] = useState("");
+export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress, onAcceptedRequest, onProviderPress }: ExploreScreenProps & { user?: SessionUser | null }) {
   const firstName = userName.split(" ")[0];
   const [remoteRequests, setRemoteRequests] = useState<ApiReceivedRequest[] | null>(null);
   const [ownRequests, setOwnRequests] = useState<ApiRequest[]>([]);
   const [ownAssignmentStates, setOwnAssignmentStates] = useState<Record<string, Awaited<ReturnType<typeof servifyApi.getAssignmentState>> | null>>({});
   const [ownPublications, setOwnPublications] = useState<ApiPublication[]>([]);
+  const [adminNotifications, setAdminNotifications] = useState<ApiNotification[]>([]);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
@@ -37,6 +40,11 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
   const [counterOfferFor, setCounterOfferFor] = useState<string | null>(null);
   const [counterPrice, setCounterPrice] = useState("");
   const [counterMessage, setCounterMessage] = useState("");
+  const [providerSearch, setProviderSearch] = useState("");
+  const [providers, setProviders] = useState<ApiPublicProvider[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [providersError, setProvidersError] = useState("");
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -45,6 +53,7 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
     setOwnRequests([]);
     setOwnAssignmentStates({});
     setOwnPublications([]);
+    setAdminNotifications([]);
     setActivityError("");
 
     if (!user) {
@@ -58,8 +67,9 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
       shouldLoadProviderData ? servifyApi.listReceivedRequests(String(user.id)).catch(() => []) : Promise.resolve([]),
       servifyApi.listUserRequests(String(user.id)).catch(() => []),
       shouldLoadProviderData ? servifyApi.listUserPublications(String(user.id)).catch(() => []) : Promise.resolve([]),
+      servifyApi.listNotifications(String(user.id)).catch(() => []),
     ])
-      .then(async ([received, requests, publications]) => {
+      .then(async ([received, requests, publications, notifications]) => {
         if (ignore) return;
         const assignmentEntries = await Promise.all(
           (requests || []).map(async (request) => [
@@ -72,6 +82,7 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
         setOwnRequests(requests || []);
         setOwnAssignmentStates(Object.fromEntries(assignmentEntries));
         setOwnPublications(publications || []);
+        setAdminNotifications(notifications || []);
       })
       .finally(() => {
         if (!ignore) setActivityLoading(false);
@@ -82,22 +93,67 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
     };
   }, [user]);
 
-  const filtered = search
-    ? categories.filter((c) => c.label.toLowerCase().includes(search.toLowerCase()))
-    : categories;
+  useEffect(() => {
+    let ignore = false;
+    const query = providerSearch.trim();
+    setProvidersError("");
+
+    if (!query) {
+      setProviders([]);
+      setProvidersLoading(false);
+      return;
+    }
+
+    setProvidersLoading(true);
+    setProvidersError("");
+
+    const timeoutId = window.setTimeout(() => {
+      servifyApi.searchProvidersByUsername(query)
+        .then((items) => {
+          if (!ignore) setProviders(items);
+        })
+        .catch((err) => {
+          if (!ignore) setProvidersError(err instanceof Error ? err.message : "No se pudieron cargar prestadores");
+        })
+        .finally(() => {
+          if (!ignore) setProvidersLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [providerSearch]);
+
   const activity = useMemo(
-    () => buildActivitySummary(remoteRequests ?? [], ownRequests, ownPublications, ownAssignmentStates),
-    [ownAssignmentStates, ownPublications, ownRequests, remoteRequests]
+    () => buildActivitySummary(remoteRequests ?? [], ownRequests, ownPublications, ownAssignmentStates, adminNotifications),
+    [adminNotifications, ownAssignmentStates, ownPublications, ownRequests, remoteRequests]
   );
   const compatibleRequests = useMemo(
     () => (remoteRequests ?? []).filter(isCompatibleReceived),
     [remoteRequests]
   );
+  const visibleCategories = showAllCategories
+    ? categories
+    : categories.filter((category) => popularCategories.has(category.label));
 
   const reloadReceivedRequests = async () => {
     if (!user || !(user.role === "provider" || user.role === "both")) return;
     const received = await servifyApi.listReceivedRequests(String(user.id)).catch(() => []);
     setRemoteRequests(received || []);
+  };
+
+  const markAdminNotificationsRead = async () => {
+    if (!user?.id) return;
+    const unread = adminNotifications.filter((notification) => !notification.leida);
+    if (unread.length === 0) return;
+    await Promise.all(
+      unread.map((notification) =>
+        servifyApi.markNotificationRead(String(user.id), notification.id).catch(() => null)
+      )
+    );
+    setAdminNotifications((current) => current.map((notification) => ({ ...notification, leida: true })));
   };
 
   const handleDistributionResponse = async (request: ApiReceivedRequest, tipoRespuesta: "ACEPTAR" | "RECHAZAR") => {
@@ -200,17 +256,29 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
               <div>
                 <p style={{ color: "#0f172a", fontSize: 14, fontWeight: 800 }}>Actividad</p>
                 <p style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>
-                  Resumen local, sin push en este release
+                  Solicitudes y avisos de Servify
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setActivityOpen(false)}
-                className="flex items-center justify-center rounded-xl"
-                style={{ width: 32, height: 32, background: "#f8fafc" }}
-              >
-                <X size={15} color="#64748b" strokeWidth={2} />
-              </button>
+              <div className="flex items-center gap-2">
+                {adminNotifications.some((notification) => !notification.leida) ? (
+                  <button
+                    type="button"
+                    onClick={markAdminNotificationsRead}
+                    className="rounded-xl px-3 py-2"
+                    style={{ background: "#eff6ff", color: "#2563eb", fontSize: 11, fontWeight: 900 }}
+                  >
+                    Marcar leidas
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setActivityOpen(false)}
+                  className="flex items-center justify-center rounded-xl"
+                  style={{ width: 32, height: 32, background: "#f8fafc" }}
+                >
+                  <X size={15} color="#64748b" strokeWidth={2} />
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 px-4 py-3">
@@ -221,8 +289,8 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
                   detail="Consultando solicitudes y publicaciones del backend."
                 />
               ) : (
-                activity.items.map((item) => (
-                  <ActivityRow key={item.title} tone={item.tone} title={item.title} detail={item.detail} />
+                activity.items.map((item, index) => (
+                  <ActivityRow key={`${item.title}-${index}`} tone={item.tone} title={item.title} detail={item.detail} />
                 ))
               )}
             </div>
@@ -236,9 +304,9 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
         >
           <Search size={18} color="#94a3b8" strokeWidth={1.8} />
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar categoría…"
+            value={providerSearch}
+            onChange={(e) => setProviderSearch(e.target.value)}
+            placeholder="Buscar prestador por @usuario"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 14, color: "#0f172a" }}
           />
@@ -247,6 +315,14 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-5">
+        <ProviderSearchSection
+          search={providerSearch}
+          providers={providers}
+          loading={providersLoading}
+          error={providersError}
+          onProviderPress={onProviderPress}
+        />
+
         {/* If provider, try to load provider-relevant requests from backend */}
         {(user?.role === "provider" || user?.role === "both") && remoteRequests && (
           <div className="mb-3">
@@ -353,7 +429,7 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
           </div>
         )}
         {/* Featured card */}
-        {!search && (
+        {!providerSearch.trim() && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -396,14 +472,26 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
         {/* Categories */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>Categorías</h3>
-            <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
-              {filtered.length} disponibles
-            </span>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
+                {showAllCategories ? "Todas las categorias" : "Categorias populares"}
+              </h3>
+              <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+                {showAllCategories ? `${categories.length} disponibles` : "Las mas solicitadas"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAllCategories((current) => !current)}
+              className="servify-action-button px-3 py-2 rounded-xl transition-all active:scale-95"
+              style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 11, fontWeight: 800 }}
+            >
+              {showAllCategories ? "Ver populares" : "Ver todas las categorias"}
+            </button>
           </div>
 
           <div className="flex flex-col gap-2.5">
-            {filtered.map((cat, i) => (
+            {visibleCategories.map((cat, i) => (
               <motion.button
                 key={cat.id}
                 initial={{ opacity: 0, y: 8 }}
@@ -447,8 +535,10 @@ function buildActivitySummary(
   receivedRequests: ApiReceivedRequest[],
   ownRequests: ApiRequest[],
   ownPublications: ApiPublication[],
-  ownAssignmentStates: Record<string, Awaited<ReturnType<typeof servifyApi.getAssignmentState>> | null>
+  ownAssignmentStates: Record<string, Awaited<ReturnType<typeof servifyApi.getAssignmentState>> | null>,
+  adminNotifications: ApiNotification[]
 ): { badgeCount: number; items: ActivityItem[] } {
+  const unreadAdminNotifications = adminNotifications.filter((notification) => !notification.leida);
   const pendingReceived = receivedRequests.filter((request) =>
     (request.estadoDistribucion ?? request.estado ?? "").toUpperCase() === "ENVIADA"
   );
@@ -466,6 +556,13 @@ function buildActivitySummary(
   );
 
   const items: ActivityItem[] = [];
+  unreadAdminNotifications.slice(0, 3).forEach((notification) => {
+    items.push({
+      title: notification.titulo,
+      detail: notification.mensaje,
+      tone: "urgent",
+    });
+  });
   if (pendingReceived.length > 0) {
     items.push({
       title: `${pendingReceived.length} solicitud${pendingReceived.length === 1 ? "" : "es"} para revisar`,
@@ -505,7 +602,7 @@ function buildActivitySummary(
   }
 
   return {
-    badgeCount: pendingReceived.length + ownCounterOffers.length,
+    badgeCount: pendingReceived.length + ownCounterOffers.length + unreadAdminNotifications.length,
     items,
   };
 }
@@ -559,6 +656,121 @@ function mapReceivedRequestForDetail(request: ApiReceivedRequest, providerId: st
     providerId,
     rawStatus: "ACEPTADA",
   };
+}
+
+function ProviderSearchSection({
+  search,
+  providers,
+  loading,
+  error,
+  onProviderPress,
+}: {
+  search: string;
+  providers: ApiPublicProvider[];
+  loading: boolean;
+  error: string;
+  onProviderPress: (provider: ApiPublicProvider) => void;
+}) {
+  const hasSearch = search.trim().length > 0;
+
+  if (!hasSearch) {
+    return null;
+  }
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>Prestadores encontrados</h3>
+          <p style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginTop: 2 }}>
+            Coincidencias para @{search.trim().replace(/^@/, "")}
+          </p>
+        </div>
+        <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
+          {providers.length} resultado{providers.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {error ? (
+        <p className="rounded-2xl px-4 py-3 mb-3" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>
+          {error}
+        </p>
+      ) : null}
+
+      {loading ? (
+        <p style={{ color: "#64748b", fontSize: 13, fontWeight: 700 }}>Cargando prestadores...</p>
+      ) : null}
+
+      {!loading && !error && providers.length === 0 ? (
+        <p className="rounded-2xl px-4 py-3" style={{ background: "#f8fafc", color: "#64748b", fontSize: 13, fontWeight: 700 }}>
+          No encontramos prestadores con ese usuario.
+        </p>
+      ) : null}
+
+      <div className="flex flex-col gap-2.5">
+        {providers.slice(0, 5).map((provider) => (
+          <ProviderCard key={provider.usuarioId} provider={provider} onClick={() => onProviderPress(provider)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProviderCard({ provider, onClick }: { provider: ApiPublicProvider; onClick: () => void }) {
+  const profileName = formatProviderName(provider);
+  const displayName = profileName || `@${provider.nombreUsuario}`;
+  const activePublications = provider.publicacionesActivas?.length
+    ? provider.publicacionesActivas.map((publication) => publication.titulo)
+    : provider.servicios;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="bg-white rounded-2xl p-4 text-left w-full transition-all active:scale-[0.98]"
+      style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="flex items-center justify-center rounded-2xl shrink-0 overflow-hidden"
+          style={{ width: 48, height: 48, background: "#ecfdf5" }}
+        >
+          {provider.fotoPerfilUrl ? (
+            <img src={provider.fotoPerfilUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <UserRound size={22} color="#0f766e" strokeWidth={1.8} />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
+                {displayName}
+              </p>
+              <p style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", marginTop: 2 }}>
+                @{provider.nombreUsuario}
+              </p>
+            </div>
+            <ChevronRight size={18} color="#cbd5e1" strokeWidth={2} />
+          </div>
+
+          <p style={{ fontSize: 12, color: "#64748b", lineHeight: 1.45, marginTop: 8, fontWeight: 700 }}>
+            {provider.cantidadPublicacionesActivas} publicacion{provider.cantidadPublicacionesActivas === 1 ? "" : "es"} activa{provider.cantidadPublicacionesActivas === 1 ? "" : "s"}
+          </p>
+          {activePublications.length ? (
+            <p style={{ fontSize: 12, color: "#475569", lineHeight: 1.45, marginTop: 3 }}>
+              {activePublications.slice(0, 3).join(", ")}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function formatProviderName(provider: ApiPublicProvider): string {
+  return [provider.nombre, provider.apellido].filter(Boolean).join(" ").trim();
 }
 
 function ActivityRow({ title, detail, tone }: ActivityItem) {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, MapPin, Users, DollarSign, Clock, CheckCircle, XCircle, MessageSquare, Edit2, Trash2, Ban, X, Save } from "lucide-react";
+import { Plus, MapPin, Users, DollarSign, Clock, CheckCircle, XCircle, MessageSquare, Edit2, Trash2, Ban, X, Save, RefreshCcw } from "lucide-react";
 import { motion } from "motion/react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiCategory, type ApiReceivedRequest, type ApiRequest, type ApiUserProfile } from "../api";
 
@@ -56,9 +56,10 @@ interface RequestsScreenProps {
   userId?: string;
   onRequestPress: (req: ServiceRequest) => void;
   onNewRequest: () => void;
+  onRepeatRequest: (req: ServiceRequest) => void;
 }
 
-export function RequestsScreen({ userId, onRequestPress, onNewRequest }: RequestsScreenProps) {
+export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatRequest }: RequestsScreenProps) {
   const [tab, setTab] = useState<RequestTab>("my-requests");
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
   const [apiReceived, setApiReceived] = useState<ServiceRequest[]>([]);
@@ -261,9 +262,9 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "#f8fafc" }}>
+    <div className="servify-dark-screen flex flex-col h-full" style={{ background: "#f8fafc" }}>
       {/* Header */}
-      <div className="px-5 pt-12 pb-0 bg-white">
+      <div className="servify-page-header px-5 pt-12 pb-0 bg-white">
         <div className="flex items-center justify-between mb-4">
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Solicitudes</h1>
           <button
@@ -282,7 +283,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
             <button
               key={id}
               onClick={() => setTab(id)}
-              className="px-3.5 py-2.5 rounded-t-xl transition-all"
+              className={`servify-tab-button px-3.5 py-2.5 rounded-t-xl transition-all ${tab === id ? "servify-tab-active" : ""}`}
               style={{
                 background: tab === id ? "#f8fafc" : "transparent",
                 color: tab === id ? "#2563eb" : "#94a3b8",
@@ -305,7 +306,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
           </p>
         )}
         {data.length === 0 && !error && (
-          <p className="rounded-2xl px-4 py-3" style={{ background: "#f8fafc", color: "#64748b", fontSize: 13, fontWeight: 700 }}>
+          <p className="servify-empty-state rounded-2xl px-4 py-3" style={{ background: "#f8fafc", color: "#64748b", fontSize: 13, fontWeight: 700 }}>
             No hay resultados.
           </p>
         )}
@@ -321,7 +322,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
               onClick={() => onRequestPress(req)}
               role="button"
               tabIndex={0}
-              className="bg-white rounded-2xl p-4 text-left w-full transition-all active:scale-[0.98]"
+              className="servify-card servify-request-card bg-white rounded-2xl p-4 text-left w-full transition-all active:scale-[0.98]"
               style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
             >
               <div className="flex items-start justify-between gap-2 mb-2">
@@ -329,7 +330,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                   {req.title}
                 </p>
                 <span
-                  className="px-2.5 py-1 rounded-full shrink-0"
+                  className="servify-status-badge px-2.5 py-1 rounded-full shrink-0"
                   style={{ background: st.bg, color: st.color, fontSize: 11, fontWeight: 700 }}
                 >
                   {st.label}
@@ -346,7 +347,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
               </div>
 
               {req.viewerRole === "SOLICITANTE" && req.providerName ? (
-                <div className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                <div className="servify-form-surface mb-3 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
                   <div className="flex items-center justify-center rounded-full" style={{ width: 24, height: 24, background: "#dcfce7", flexShrink: 0 }}>
                     <span style={{ fontSize: 10, fontWeight: 800, color: "#16a34a" }}>{req.providerInitials}</span>
                   </div>
@@ -379,13 +380,29 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                 </div>
               </div>
 
-              {canManageOwnRequest(req) ? (
-                <div className="mt-4 pt-3 grid grid-cols-3 gap-2" style={{ borderTop: "1px solid #f1f5f9" }} onClick={(event) => event.stopPropagation()}>
+              {req.viewerRole === "SOLICITANTE" ? (
+                <div
+                  className="servify-card-footer mt-4 pt-3 grid grid-cols-2 gap-2"
+                  style={{ borderTop: "1px solid #f1f5f9" }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    disabled={Boolean(actionLoading)}
+                    onClick={() => onRepeatRequest(req)}
+                    className="servify-action-button servify-action-teal flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    style={{ fontSize: 12, fontWeight: 800 }}
+                  >
+                    <RefreshCcw size={14} strokeWidth={2} />
+                    Repetir
+                  </button>
+                  {canManageOwnRequest(req) ? (
+                    <>
                   <button
                     type="button"
                     disabled={Boolean(actionLoading) || !canEditOwnRequest(req)}
                     onClick={() => openEditRequest(req)}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                     style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 12, fontWeight: 800, opacity: canEditOwnRequest(req) ? 1 : 0.55 }}
                   >
                     <Edit2 size={14} strokeWidth={2} />
@@ -395,7 +412,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                     type="button"
                     disabled={Boolean(actionLoading)}
                     onClick={() => handleCancelRequest(req, false)}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                     style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
                   >
                     <Ban size={14} strokeWidth={2} />
@@ -405,23 +422,25 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                     type="button"
                     disabled={Boolean(actionLoading)}
                     onClick={() => handleCancelRequest(req, true)}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                    className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                     style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontSize: 12, fontWeight: 800 }}
                   >
                     <Trash2 size={14} strokeWidth={2} />
                     Eliminar
                   </button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
 
               {canProviderRespond(req) ? (
-                <div className="mt-4 pt-3" style={{ borderTop: "1px solid #f1f5f9" }} onClick={(event) => event.stopPropagation()}>
+                <div className="servify-card-footer mt-4 pt-3" style={{ borderTop: "1px solid #f1f5f9" }} onClick={(event) => event.stopPropagation()}>
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       disabled={Boolean(actionLoading)}
                       onClick={() => handleDistributionResponse(req, "ACEPTAR")}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                       style={{ background: "#f0fdf4", color: "#16a34a", border: "1.5px solid #bbf7d0", fontSize: 12, fontWeight: 800 }}
                     >
                       <CheckCircle size={14} strokeWidth={2} />
@@ -431,7 +450,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                       type="button"
                       disabled={Boolean(actionLoading)}
                       onClick={() => handleDistributionResponse(req, "RECHAZAR")}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                       style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontSize: 12, fontWeight: 800 }}
                     >
                       <XCircle size={14} strokeWidth={2} />
@@ -445,7 +464,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                         setCounterPrice("");
                         setCounterMessage("");
                       }}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                       style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
                     >
                       <MessageSquare size={14} strokeWidth={2} />
@@ -454,7 +473,7 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest }: Request
                   </div>
 
                   {counterOfferFor === req.distributionId ? (
-                    <div className="mt-3 flex flex-col gap-2 rounded-2xl p-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div className="servify-form-surface mt-3 flex flex-col gap-2 rounded-2xl p-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                       <input
                         value={counterPrice}
                         onChange={(event) => setCounterPrice(event.target.value)}
@@ -659,7 +678,7 @@ function EditRequestSheet({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        className="w-full bg-white rounded-t-3xl max-h-[88%] flex flex-col"
+        className="servify-sheet w-full bg-white rounded-t-3xl max-h-[88%] flex flex-col"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex flex-col items-center pt-3 pb-2 shrink-0">
@@ -777,7 +796,7 @@ function EditField({ label, children }: { label: string; children: React.ReactNo
   return (
     <div>
       <p style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 8 }}>{label}</p>
-      <div className="px-4 py-3.5 rounded-2xl bg-white" style={{ border: "1.5px solid #e2e8f0" }}>
+      <div className="servify-form-surface px-4 py-3.5 rounded-2xl bg-white" style={{ border: "1.5px solid #e2e8f0" }}>
         {children}
       </div>
     </div>
@@ -787,7 +806,7 @@ function EditField({ label, children }: { label: string; children: React.ReactNo
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
   return (
     <span
-      className="px-2.5 py-1 rounded-full"
+      className="servify-chip px-2.5 py-1 rounded-full"
       style={{ background: bg, color, fontSize: 11, fontWeight: 700 }}
     >
       {label}

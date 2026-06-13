@@ -29,9 +29,19 @@ public interface UsuarioRepositoryPort {
     Optional<Usuario> buscarPorEmail(String email);
 
     /**
+     * Busca un usuario por su nombre de usuario unico.
+     */
+    Optional<Usuario> buscarPorNombreUsuario(String nombreUsuario);
+
+    /**
      * Indica si existe un usuario registrado con el email provisto.
      */
     boolean existePorEmail(String email);
+
+    /**
+     * Indica si existe un usuario registrado con el nombre de usuario provisto.
+     */
+    boolean existePorNombreUsuario(String nombreUsuario);
 
     /**
      * Lista usuarios por estado para consultas operativas simples.

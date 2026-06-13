@@ -1,5 +1,7 @@
 package com.servify;
 
+import com.servify.usuarios.application.port.out.UsuarioRepositoryPort;
+import com.servify.usuarios.domain.enumtype.Rol;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -30,6 +32,9 @@ class MvpHttpFlowTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private UsuarioRepositoryPort usuarioRepositoryPort;
 
     @Test
     void flujoPrincipalMvp_exponeIdsNecesariosParaReact() throws Exception {
@@ -245,14 +250,131 @@ class MvpHttpFlowTests {
     }
 
     @Test
-    void listarUsuariosActivos_exponeEndpointSimpleParaVerificarBackendLocal() throws Exception {
+    void listarUsuariosActivos_requiereTokenAdmin() throws Exception {
         UUID usuarioId = crearUsuario("diagnostico-http@servify.test");
 
-        JsonNode usuarios = responseJson(getPath("/api/v1/usuarios?estado=ACTIVO"));
+        mockMvc.perform(get("/api/v1/usuarios?estado=ACTIVO"))
+                .andExpect(status().isUnauthorized());
+
+        String adminToken = crearAdminYLogin("admin-listar-http@servify.test", "admin.listar");
+        JsonNode admin = responseJson(getPathAuth("/api/v1/admin/me", adminToken));
+        JsonNode usuarios = responseJson(getPathAuth("/api/v1/usuarios?estado=ACTIVO", adminToken));
 
         assertNotNull(usuarioId);
+        assertEquals("ADMIN", admin.get("rol").asText());
         org.junit.jupiter.api.Assertions.assertTrue(usuarios.isArray());
         org.junit.jupiter.api.Assertions.assertTrue(usuarios.size() >= 1);
+    }
+
+    @Test
+    void buscarPrestadoresPublicosFiltraPorNombreUsuarioYSoloIncluyePublicacionesActivas() throws Exception {
+        UUID prestadorAlfaId = crearUsuarioConNombreUsuario("prestador-alfa-http@servify.test", "alfa.tecnico");
+        UUID prestadorBetaId = crearUsuarioConNombreUsuario("prestador-beta-http@servify.test", "beta.tecnico");
+        UUID usuarioSinPublicacionId = crearUsuarioConNombreUsuario("usuario-alfa-sin-publicacion-http@servify.test", "alfa.sinservicio");
+        completarPerfilPalermo(prestadorAlfaId);
+        completarPerfilPalermo(prestadorBetaId);
+        completarPerfilPalermo(usuarioSinPublicacionId);
+
+        UUID categoriaId = crearCategoriaActiva("Busqueda prestadores HTTP");
+        crearPublicacionActiva(prestadorAlfaId, categoriaId, "Reparacion alfa HTTP", "Palermo", 12000);
+        crearPublicacionActiva(prestadorBetaId, categoriaId, "Reparacion beta HTTP", "Palermo", 14000);
+
+        JsonNode sinBusqueda = responseJson(getPath("/api/v1/prestadores"));
+        assertTrue(sinBusqueda.isArray());
+        assertEquals(0, sinBusqueda.size());
+
+        JsonNode prestadores = responseJson(getPath("/api/v1/prestadores?nombreUsuario=alfa"));
+
+        assertTrue(prestadores.isArray());
+        assertEquals(1, prestadores.size());
+        JsonNode prestador = prestadores.get(0);
+        assertEquals(prestadorAlfaId.toString(), prestador.get("usuarioId").asText());
+        assertEquals("alfa.tecnico", prestador.get("nombreUsuario").asText());
+        assertEquals(1, prestador.get("cantidadPublicacionesActivas").asInt());
+        assertEquals("Busqueda prestadores HTTP", prestador.get("categorias").get(0).asText());
+        assertTrue(!prestador.has("email"));
+        assertTrue(!prestador.has("telefono"));
+    }
+
+    @Test
+    void autenticacionDistingueUsernameEmailDuplicadoCuentaInexistenteYPasswordIncorrecta() throws Exception {
+        UUID usuarioId = idFrom(postCreatedPath("/api/v1/usuarios", """
+                {
+                  "email": "username-login-http@servify.test",
+                  "nombreUsuario": "tester.login",
+                  "telefono": "1111",
+                  "rol": "USUARIO"
+                }
+                """));
+
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "username-login-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """.formatted(usuarioId)))
+                .andExpect(status().isCreated());
+
+        JsonNode sesion = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "tester.login",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """));
+        assertEquals(usuarioId.toString(), sesion.get("usuarioId").asText());
+
+        JsonNode passwordIncorrecta = responseJson(mockMvc.perform(postJson("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "tester.login",
+                  "passwordPlano": "OtraClave1!"
+                }
+                """))
+                .andExpect(status().isBadRequest())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals("Contrasena incorrecta", passwordIncorrecta.get("message").asText());
+
+        JsonNode cuentaInexistente = responseJson(mockMvc.perform(postJson("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "no-existe",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """))
+                .andExpect(status().isBadRequest())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals("No existe una cuenta registrada con ese email o nombre de usuario", cuentaInexistente.get("message").asText());
+
+        JsonNode emailDuplicado = responseJson(mockMvc.perform(postJson("/api/v1/usuarios", """
+                {
+                  "email": "username-login-http@servify.test",
+                  "nombreUsuario": "otro.login",
+                  "telefono": "2222",
+                  "rol": "USUARIO"
+                }
+                """))
+                .andExpect(status().isConflict())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals("Ese email ya tiene un usuario registrado", emailDuplicado.get("message").asText());
+
+        JsonNode usuarioDuplicado = responseJson(mockMvc.perform(postJson("/api/v1/usuarios", """
+                {
+                  "email": "otro-username-http@servify.test",
+                  "nombreUsuario": "tester.login",
+                  "telefono": "3333",
+                  "rol": "USUARIO"
+                }
+                """))
+                .andExpect(status().isConflict())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals("Ese nombre de usuario ya esta en uso", usuarioDuplicado.get("message").asText());
     }
 
     @Test
@@ -1044,6 +1166,42 @@ class MvpHttpFlowTests {
                 """.formatted(email)));
     }
 
+    private UUID crearUsuarioConNombreUsuario(String email, String nombreUsuario) throws Exception {
+        return idFrom(postCreatedPath("/api/v1/usuarios", """
+                {
+                  "email": "%s",
+                  "nombreUsuario": "%s",
+                  "telefono": "1111",
+                  "rol": "USUARIO"
+                }
+                """.formatted(email, nombreUsuario)));
+    }
+
+    private String crearAdminYLogin(String email, String nombreUsuario) throws Exception {
+        UUID adminId = crearUsuarioConNombreUsuario(email, nombreUsuario);
+        usuarioRepositoryPort.buscarPorId(adminId).ifPresent(usuario -> {
+            usuario.setRol(Rol.ADMIN);
+            usuarioRepositoryPort.guardar(usuario);
+        });
+
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "%s",
+                  "passwordPlano": "AdminPassw0rd!"
+                }
+                """.formatted(adminId, email)))
+                .andExpect(status().isCreated());
+
+        JsonNode sesion = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "%s",
+                  "passwordPlano": "AdminPassw0rd!"
+                }
+                """.formatted(nombreUsuario)));
+        return sesion.get("accessToken").get("token").asText();
+    }
+
     private void completarPerfilPalermo(UUID usuarioId) throws Exception {
         mockMvc.perform(putJson("/api/v1/usuarios/" + usuarioId + "/perfil", """
                 {
@@ -1170,6 +1328,14 @@ class MvpHttpFlowTests {
 
     private String getPath(String path) throws Exception {
         return mockMvc.perform(get(path))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+    }
+
+    private String getPathAuth(String path, String accessToken) throws Exception {
+        return mockMvc.perform(get(path).header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

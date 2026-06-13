@@ -8,10 +8,12 @@ import com.servify.usuarios.application.port.in.CrearUsuarioUseCase;
 import com.servify.usuarios.application.port.out.UsuarioRepositoryPort;
 import com.servify.usuarios.domain.enumtype.EstadoUsuario;
 import com.servify.usuarios.domain.enumtype.EstadoValidacionIdentidad;
+import com.servify.usuarios.domain.enumtype.Rol;
 import com.servify.usuarios.domain.model.Usuario;
 import com.servify.usuarios.domain.valueobject.Contacto;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 public class CrearUsuarioService implements CrearUsuarioUseCase {
@@ -42,10 +44,15 @@ public class CrearUsuarioService implements CrearUsuarioUseCase {
         Contacto contacto = construirContacto(command);
 
         if (usuarioRepositoryPort.existePorEmail(contacto.getEmail())) {
-            throw new BusinessRuleException("Ya existe un usuario registrado con el email informado");
+            throw new BusinessRuleException("Ese email ya tiene un usuario registrado");
         }
 
-        Usuario usuario = construirUsuario(command);
+        String nombreUsuario = obtenerNombreUsuario(command, contacto.getEmail());
+        if (usuarioRepositoryPort.existePorNombreUsuario(nombreUsuario)) {
+            throw new BusinessRuleException("Ese nombre de usuario ya esta en uso");
+        }
+
+        Usuario usuario = construirUsuario(command, contacto, nombreUsuario);
         Usuario usuarioPersistido = usuarioRepositoryPort.guardar(usuario);
 
         return construirResultado(usuarioPersistido);
@@ -57,10 +64,17 @@ public class CrearUsuarioService implements CrearUsuarioUseCase {
             throw new ValidationException("El command de creacion de usuario es obligatorio");
         }
 
+        Contacto contacto = construirContacto(command);
+        String nombreUsuario = obtenerNombreUsuario(command, contacto.getEmail());
+        return construirUsuario(command, contacto, nombreUsuario);
+    }
+
+    protected Usuario construirUsuario(CrearUsuarioCommand command, Contacto contacto, String nombreUsuario) {
         return new Usuario(
                 generarIdUsuario(),
-                construirContacto(command),
-                command.getRol(),
+                nombreUsuario,
+                contacto,
+                obtenerRolInicialUsuario(),
                 obtenerEstadoInicialUsuario(),
                 obtenerEstadoInicialValidacionIdentidad(),
                 null,
@@ -97,6 +111,7 @@ public class CrearUsuarioService implements CrearUsuarioUseCase {
         return new UsuarioResult(
                 usuario.getId(),
                 contacto != null ? contacto.getEmail() : null,
+                usuario.getNombreUsuario(),
                 contacto != null ? contacto.getTelefono() : null,
                 usuario.getRol(),
                 usuario.getEstado(),
@@ -105,9 +120,77 @@ public class CrearUsuarioService implements CrearUsuarioUseCase {
         );
     }
 
+    protected String obtenerNombreUsuario(CrearUsuarioCommand command, String email) {
+        String nombreUsuarioExplicito = normalizarTextoOpcional(command.getNombreUsuario());
+        if (nombreUsuarioExplicito != null) {
+            return normalizarNombreUsuario(nombreUsuarioExplicito);
+        }
+
+        String localPart = email != null && email.contains("@") ? email.substring(0, email.indexOf("@")) : "usuario";
+        return generarNombreUsuarioDisponible(localPart);
+    }
+
+    protected String normalizarNombreUsuario(String valor) {
+        String normalizado = normalizarTextoObligatorio(valor, "El nombre de usuario es obligatorio")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        if (!normalizado.matches("^[a-z0-9._-]{3,30}$")) {
+            throw new ValidationException("El nombre de usuario debe tener 3 a 30 caracteres y solo puede usar letras, numeros, punto, guion o guion bajo");
+        }
+        return normalizado;
+    }
+
+    private String generarNombreUsuarioDisponible(String valorBase) {
+        String base = normalizarNombreUsuarioGenerado(valorBase);
+        String candidato = recortarNombreUsuario(base, "");
+        int intento = 2;
+
+        while (usuarioRepositoryPort.existePorNombreUsuario(candidato)) {
+            String sufijo = "." + intento;
+            candidato = recortarNombreUsuario(base, sufijo) + sufijo;
+            intento++;
+        }
+
+        return normalizarNombreUsuario(candidato);
+    }
+
+    private String normalizarNombreUsuarioGenerado(String valor) {
+        String normalizado = normalizarTextoOpcional(valor);
+        if (normalizado == null) {
+            normalizado = "usuario";
+        }
+
+        normalizado = normalizado
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9._-]", ".")
+                .replaceAll("\\.+", ".")
+                .replaceAll("^[._-]+|[._-]+$", "");
+
+        if (normalizado.length() < 3) {
+            normalizado = "usuario" + normalizado;
+        }
+
+        return normalizado;
+    }
+
+    private String recortarNombreUsuario(String base, String sufijo) {
+        int maximoBase = 30 - sufijo.length();
+        if (base.length() <= maximoBase) {
+            return base;
+        }
+
+        return base.substring(0, maximoBase).replaceAll("[._-]+$", "");
+    }
+
     protected EstadoUsuario obtenerEstadoInicialUsuario() {
         // Define el estado con el que se registra una cuenta nueva.
         return EstadoUsuario.ACTIVO;
+    }
+
+    protected Rol obtenerRolInicialUsuario() {
+        // El registro publico siempre crea usuarios comunes. Las cuentas ADMIN se promueven por operacion segura de base.
+        return Rol.USUARIO;
     }
 
     protected EstadoValidacionIdentidad obtenerEstadoInicialValidacionIdentidad() {

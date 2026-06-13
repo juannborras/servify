@@ -8,11 +8,13 @@ import { RequestsScreen, type ServiceRequest } from "./components/RequestsScreen
 import { RequestDetail, type RatingTarget } from "./components/RequestDetail";
 import { PublishScreen } from "./components/PublishScreen";
 import { MyPublications } from "./components/MyPublications";
-import { ProfileScreen } from "./components/ProfileScreen";
+import { AdminPanelScreen } from "./components/AdminPanelScreen";
+import { PublicProfileScreen } from "./components/PublicProfileScreen";
+import { SettingsDrawer } from "./components/SettingsDrawer";
 import { BottomNav } from "./components/BottomNav";
 import { RatingModal } from "./components/RatingModal";
-import { NewRequestModal } from "./components/NewRequestModal";
-import { servifyApi, type SessionUser } from "./api";
+import { NewRequestModal, type NewRequestInitialValues } from "./components/NewRequestModal";
+import { servifyApi, type ApiPublicProvider, type SessionUser } from "./api";
 
 type AppScreen =
   | "splash"
@@ -21,11 +23,14 @@ type AppScreen =
   | "category-publications"
   | "requests"
   | "request-detail"
+  | "provider-profile"
+  | "admin"
   | "my-services"
   | "publish"
   | "profile";
 
 type BottomTab = "explore" | "requests" | "my-services" | "publish" | "profile";
+type ProviderBackScreen = "explore" | "category-publications" | "admin";
 
 export default function App() {
   const storedSession = servifyApi.getStoredSession();
@@ -33,13 +38,17 @@ export default function App() {
   const [user, setUser] = useState<SessionUser | null>(storedSession);
   const [activeTab, setActiveTab] = useState<BottomTab>("explore");
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ApiPublicProvider | null>(null);
+  const [providerBackScreen, setProviderBackScreen] = useState<ProviderBackScreen>("explore");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [showRating, setShowRating] = useState(false);
   const [ratingTarget, setRatingTarget] = useState<RatingTarget | null>(null);
   const [showNewRequest, setShowNewRequest] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [newRequestInitialValues, setNewRequestInitialValues] = useState<NewRequestInitialValues | null>(null);
 
   const showNav =
-    screen !== "splash" && screen !== "auth" && screen !== "request-detail";
+    screen !== "splash" && screen !== "auth";
 
   const handleSplashDone = () => setScreen(user ? "explore" : "auth");
 
@@ -78,6 +87,17 @@ export default function App() {
     setScreen("request-detail");
   };
 
+  const handleProviderPress = (provider: ApiPublicProvider, backScreen: ProviderBackScreen = "explore") => {
+    setSelectedProvider(provider);
+    setProviderBackScreen(backScreen);
+    setScreen("provider-profile");
+  };
+
+  const handleOpenNewRequest = (initialValues?: NewRequestInitialValues) => {
+    setNewRequestInitialValues(initialValues ?? null);
+    setShowNewRequest(true);
+  };
+
   const handleRate = (target: RatingTarget) => {
     setRatingTarget(target);
     setShowRating(true);
@@ -104,19 +124,23 @@ export default function App() {
           <ExploreScreen
             user={user}
             userName={user?.name ?? "Usuario"}
-            onCreateRequest={() => setShowNewRequest(true)}
+            onCreateRequest={() => handleOpenNewRequest()}
             onCategoryPress={handleCategoryPress}
             onAcceptedRequest={handleRequestPress}
+            onProviderPress={(provider) => handleProviderPress(provider, "explore")}
           />
         );
       case "category-publications":
         return (
           <CategoryPublicationsScreen
             categoryName={selectedCategory}
+            currentUserId={user?.id}
             onBack={() => {
               setScreen("explore");
               setActiveTab("explore");
             }}
+            onRequestPublication={(initialValues) => handleOpenNewRequest(initialValues)}
+            onProviderPress={(provider) => handleProviderPress(provider, "category-publications")}
           />
         );
       case "requests":
@@ -124,7 +148,8 @@ export default function App() {
           <RequestsScreen
             userId={user?.id}
             onRequestPress={handleRequestPress}
-            onNewRequest={() => setShowNewRequest(true)}
+            onNewRequest={() => handleOpenNewRequest()}
+            onRepeatRequest={(request) => handleOpenNewRequest(toNewRequestInitialValues(request))}
           />
         );
       case "request-detail":
@@ -139,6 +164,26 @@ export default function App() {
             onRate={handleRate}
           />
         ) : null;
+      case "provider-profile":
+        return (
+          <PublicProfileScreen
+            provider={selectedProvider}
+            onBack={() => {
+              setScreen(providerBackScreen);
+              setActiveTab(providerBackScreen === "admin" ? "profile" : "explore");
+            }}
+          />
+        );
+      case "admin":
+        return (
+          <AdminPanelScreen
+            onProviderPress={(provider) => handleProviderPress(provider, "admin")}
+            onBack={() => {
+              setScreen("profile");
+              setActiveTab("profile");
+            }}
+          />
+        );
       case "my-services":
         return (
           <MyPublications
@@ -153,11 +198,10 @@ export default function App() {
         return <PublishScreen userId={user?.id} onPublished={handlePublished} />;
       case "profile":
         return (
-          <ProfileScreen
+          <PublicProfileScreen
             user={user}
-            onLogout={handleLogout}
-            onLogin={() => setScreen("auth")}
-            onUserUpdated={handleProfileUpdated}
+            ownProfile
+            onOpenSettings={() => setShowSettings(true)}
           />
         );
       default:
@@ -207,6 +251,7 @@ export default function App() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 80, opacity: 0 }}
               transition={{ duration: 0.3 }}
+              className="sticky bottom-0 z-40"
               style={{ flexShrink: 0 }}
             >
               <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
@@ -244,16 +289,53 @@ export default function App() {
             <div className="absolute inset-0 z-50">
               <NewRequestModal
                 userId={user?.id}
+                initialValues={newRequestInitialValues ?? undefined}
                 onClose={() => setShowNewRequest(false)}
                 onCreated={() => {
                   setActiveTab("requests");
                   setScreen("requests");
+                  setNewRequestInitialValues(null);
                 }}
               />
             </div>
           )}
         </AnimatePresence>
+
+        <SettingsDrawer
+          open={showSettings}
+          user={user}
+          onClose={() => setShowSettings(false)}
+          onLogout={() => {
+            setShowSettings(false);
+            handleLogout();
+          }}
+          onOpenAdmin={() => {
+            setShowSettings(false);
+            setScreen("admin");
+            setActiveTab("profile");
+          }}
+          onUserUpdated={handleProfileUpdated}
+        />
       </div>
     </div>
   );
+}
+
+function toNewRequestInitialValues(request: ServiceRequest): NewRequestInitialValues {
+  const title = request.title || "Solicitud de servicio";
+  const description = request.description.startsWith(`${title}.`)
+    ? request.description.slice(title.length + 1).trim()
+    : request.description;
+
+  return {
+    title,
+    description,
+    category: request.category.toLowerCase().startsWith("sin categor") ? undefined : request.category,
+    modality: request.modal,
+    location: request.locality ?? request.location,
+    price: request.price === "A convenir" ? "" : request.price,
+    availabilityDay: request.availabilityDay,
+    availabilityFrom: request.availabilityFrom,
+    availabilityTo: request.availabilityTo,
+  };
 }

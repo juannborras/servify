@@ -32,6 +32,7 @@ public class ListarUsuariosService implements ListarUsuariosUseCase {
         return new UsuarioResult(
                 usuario.getId(),
                 contacto != null ? contacto.getEmail() : null,
+                usuario.getNombreUsuario(),
                 contacto != null ? contacto.getTelefono() : null,
                 usuario.getRol(),
                 usuario.getEstado(),

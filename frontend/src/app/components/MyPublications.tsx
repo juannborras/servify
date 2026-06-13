@@ -175,8 +175,8 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
   const canSaveEdit = Boolean(editForm?.title && editForm.description && editForm.category && editForm.modality && editForm.price);
 
   return (
-    <div className="relative flex flex-col h-full" style={{ background: "#f8fafc" }}>
-      <div className="px-5 pt-12 pb-5 bg-white">
+    <div className="servify-dark-screen relative flex flex-col h-full" style={{ background: "#f8fafc" }}>
+      <div className="servify-page-header px-5 pt-12 pb-5 bg-white">
         <div className="flex items-center justify-between mb-1">
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Mis publicaciones</h1>
           <button
@@ -207,7 +207,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
               animate={{ opacity: deletingId === pub.id ? 0 : 1, y: 0, scale: deletingId === pub.id ? 0.95 : 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.3, delay: deletingId === pub.id ? 0 : i * 0.06 }}
-              className="bg-white rounded-2xl overflow-hidden"
+              className="servify-card servify-publication-card bg-white rounded-2xl overflow-hidden"
               style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
             >
               <div className="p-4">
@@ -216,7 +216,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                     {pub.title}
                   </h3>
                   <span
-                    className="px-2.5 py-1 rounded-full shrink-0"
+                    className="servify-status-badge px-2.5 py-1 rounded-full shrink-0"
                     style={{
                       background: pub.active ? "#f0fdf4" : "#f1f5f9",
                       color: pub.active ? "#16a34a" : "#94a3b8",
@@ -229,7 +229,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                 </div>
 
                 <span
-                  className="inline-block px-2.5 py-1 rounded-full mb-2"
+                  className="servify-chip inline-block px-2.5 py-1 rounded-full mb-2"
                   style={{ background: "#ecfeff", color: "#0891b2", fontSize: 11, fontWeight: 700 }}
                 >
                   {pub.category}
@@ -246,16 +246,13 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 px-4 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
+              <div className="servify-card-footer grid grid-cols-3 gap-2 px-4 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
                 <button
                   onClick={() => toggleActive(pub.id)}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                  className={`servify-action-button ${pub.active ? "servify-action-warning" : "servify-action-success"} flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95`}
                   style={{
-                    background: pub.active ? "#fff7ed" : "#f0fdf4",
-                    color: pub.active ? "#d97706" : "#16a34a",
                     fontWeight: 700,
                     fontSize: 12,
-                    border: `1.5px solid ${pub.active ? "#fed7aa" : "#bbf7d0"}`,
                   }}
                 >
                   {pub.active ? <Pause size={14} strokeWidth={2} /> : <Play size={14} strokeWidth={2} />}
@@ -263,7 +260,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                 </button>
                 <button
                   onClick={() => openEdit(pub)}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                  className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                   style={{ background: "#eff6ff", color: "#2563eb", fontWeight: 700, fontSize: 12, border: "1.5px solid #bfdbfe" }}
                 >
                   <Edit3 size={14} strokeWidth={1.8} />
@@ -271,7 +268,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                 </button>
                 <button
                   onClick={() => handleDelete(pub.id)}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                  className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                   style={{ background: "#fef2f2", color: "#ef4444", fontWeight: 700, fontSize: 12, border: "1.5px solid #fecaca" }}
                 >
                   <Trash2 size={14} strokeWidth={1.8} />
@@ -283,7 +280,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
         </AnimatePresence>
 
         {pubs.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div className="servify-empty-state flex flex-col items-center justify-center py-16 gap-4 rounded-3xl px-5">
             <div className="flex items-center justify-center rounded-3xl" style={{ width: 72, height: 72, background: "#f1f5f9" }}>
               <FileText size={30} color="#64748b" strokeWidth={1.6} />
             </div>
@@ -310,10 +307,10 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 18 }}
-            className="absolute inset-0 z-40 flex flex-col"
+            className="servify-dark-screen absolute inset-0 z-40 flex flex-col"
             style={{ background: "#f8fafc" }}
           >
-            <div className="px-5 pt-12 pb-5 bg-white">
+            <div className="servify-page-header px-5 pt-12 pb-5 bg-white">
               <div className="flex items-center justify-between">
                 <div>
                   <p style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>Publicacion</p>
@@ -385,7 +382,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                         key={option}
                         type="button"
                         onClick={() => toggleEditArea(option)}
-                        className="px-3 py-2 rounded-xl text-left transition-all"
+                        className="servify-choice-chip px-3 py-2 rounded-xl text-left transition-all"
                         style={{
                           background: selected ? "#eff6ff" : "#f8fafc",
                           border: selected ? "1.5px solid #2563eb" : "1px solid #e2e8f0",
@@ -580,7 +577,7 @@ function EditField({
   return (
     <div>
       <p style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 8 }}>{label}</p>
-      <div className="flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-white" style={{ border: "1.5px solid #e2e8f0" }}>
+      <div className="servify-form-surface flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-white" style={{ border: "1.5px solid #e2e8f0" }}>
         <div className="mt-0.5">{icon}</div>
         <div className="flex-1">{children}</div>
       </div>
@@ -612,7 +609,7 @@ function ChipGroup({
               key={item}
               type="button"
               onClick={() => onChange(item)}
-              className="px-3.5 py-2 rounded-full transition-all"
+              className="servify-choice-chip px-3.5 py-2 rounded-full transition-all"
               style={{
                 background: selected ? color : "#f1f5f9",
                 color: selected ? "white" : "#475569",

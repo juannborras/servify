@@ -8,6 +8,7 @@ import {
   Calendar,
   Clock,
   Camera,
+  ImagePlus,
   Eye,
   EyeOff,
 } from "lucide-react";
@@ -91,6 +92,9 @@ const roleOptions: { id: RoleType; label: string; sub: string; emoji: string; co
 ];
 
 export function AuthScreen({ onAuth }: AuthScreenProps) {
+  const registerGalleryInputRef = useRef<HTMLInputElement | null>(null);
+  const registerCameraInputRef = useRef<HTMLInputElement | null>(null);
+
   const [tab, setTab] = useState<AuthTab>("login");
   const [showPass, setShowPass] = useState(false);
   const [showRegisterPass, setShowRegisterPass] = useState(false);
@@ -100,9 +104,12 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const [loginPass, setLoginPass] = useState("");
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPass, setRegisterPass] = useState("");
   const [registerPassConfirm, setRegisterPassConfirm] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [profilePhotoDataUrl, setProfilePhotoDataUrl] = useState("");
   const [locality, setLocality] = useState(LOCATION_OPTIONS[0]);
   const [availabilityDayFrom, setAvailabilityDayFrom] = useState(WEEK_DAYS[0].value);
   const [availabilityDayTo, setAvailabilityDayTo] = useState(WEEK_DAYS[4].value);
@@ -116,6 +123,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const canAttemptRegister = Boolean(
     selectedRole &&
       registerEmail &&
+      username &&
       registerPass &&
       registerPassConfirm &&
       passwordIsStrong &&
@@ -155,6 +163,10 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
 
   const handleRegister = async () => {
     if (!selectedRole || !registerEmail || !registerPass) return;
+    if (!username.trim()) {
+      setError("Ingresa un nombre de usuario");
+      return;
+    }
     if (!passwordIsStrong) {
       setError("La contrasena debe tener mayuscula, minuscula, numero y caracter especial.");
       return;
@@ -170,8 +182,11 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         await servifyApi.register({
           nombre: name,
           apellido: lastName,
+          nombreUsuario: username,
           email: registerEmail,
           password: registerPass,
+          fechaNacimiento: birthDate,
+          profilePhotoDataUrl,
           localidad: locality,
           disponibilidadDiaDesde: availabilityDayFrom,
           disponibilidadDiaHasta: availabilityDayTo,
@@ -185,6 +200,24 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProfilePhotoSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Selecciona una imagen valida para tu perfil");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfilePhotoDataUrl(typeof reader.result === "string" ? reader.result : "");
+      setError("");
+    };
+    reader.onerror = () => setError("No se pudo leer la foto seleccionada");
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -259,10 +292,10 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
 
               <InputField
                 icon={<Mail size={17} color="#94a3b8" strokeWidth={1.8} />}
-                placeholder="Email"
+                placeholder="Email o nombre de usuario"
                 value={loginEmail}
                 onChange={setLoginEmail}
-                type="email"
+                type="text"
               />
               <InputField
                 icon={<Lock size={17} color="#94a3b8" strokeWidth={1.8} />}
@@ -339,20 +372,44 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
 
               <div className="flex flex-col items-center gap-2 py-2">
                 <div
-                  className="flex items-center justify-center rounded-full relative"
+                  className="flex items-center justify-center rounded-full relative overflow-hidden"
                   style={{ width: 76, height: 76, background: "#f1f5f9", border: "2px dashed #cbd5e1" }}
                 >
-                  <Camera size={22} color="#94a3b8" strokeWidth={1.7} />
+                  {profilePhotoDataUrl ? (
+                    <img src={profilePhotoDataUrl} alt="Foto de perfil" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <Camera size={22} color="#94a3b8" strokeWidth={1.7} />
+                  )}
                 </div>
-                <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
-                  Foto de perfil (opcional)
-                </span>
+                <div className="grid grid-cols-2 gap-2 w-full">
+                  <button
+                    type="button"
+                    onClick={() => registerGalleryInputRef.current?.click()}
+                    className="py-2.5 rounded-xl flex items-center justify-center gap-2"
+                    style={{ border: "1px solid #cbd5e1", color: "#0f172a", fontSize: 13, fontWeight: 700 }}
+                  >
+                    <ImagePlus size={15} strokeWidth={1.8} />
+                    Elegir foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => registerCameraInputRef.current?.click()}
+                    className="py-2.5 rounded-xl flex items-center justify-center gap-2"
+                    style={{ border: "1px solid #cbd5e1", color: "#0f172a", fontSize: 13, fontWeight: 700 }}
+                  >
+                    <Camera size={15} strokeWidth={1.8} />
+                    Sacar foto
+                  </button>
+                </div>
+                <input ref={registerGalleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoSelected} />
+                <input ref={registerCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleProfilePhotoSelected} />
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
                 <InputField icon={<User size={17} color="#94a3b8" strokeWidth={1.8} />} placeholder="Nombre" value={name} onChange={setName} />
                 <InputField icon={<User size={17} color="#94a3b8" strokeWidth={1.8} />} placeholder="Apellido" value={lastName} onChange={setLastName} />
               </div>
+              <InputField icon={<User size={17} color="#94a3b8" strokeWidth={1.8} />} placeholder="Nombre de usuario" value={username} onChange={setUsername} />
               <InputField icon={<Mail size={17} color="#94a3b8" strokeWidth={1.8} />} placeholder="Email" value={registerEmail} onChange={setRegisterEmail} type="email" />
               <InputField
                 icon={<Lock size={17} color="#94a3b8" strokeWidth={1.8} />}
@@ -415,7 +472,13 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
                   </select>
                 </div>
               </div>
-              <InputField icon={<Calendar size={17} color="#94a3b8" strokeWidth={1.8} />} placeholder="Fecha de nacimiento" type="date" />
+              <LabeledInputField
+                icon={<Calendar size={17} color="#94a3b8" strokeWidth={1.8} />}
+                label="Fecha de nacimiento"
+                value={birthDate}
+                onChange={setBirthDate}
+                type="date"
+              />
 
               <button
                 onClick={handleRegister}
@@ -637,5 +700,36 @@ function InputField({
       />
       {suffix}
     </div>
+  );
+}
+
+function LabeledInputField({
+  icon,
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value?: string;
+  onChange?: (v: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span style={{ fontSize: 12, fontWeight: 800, color: "#64748b" }}>{label}</span>
+      <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl" style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0" }}>
+        {icon}
+        <input
+          type={type}
+          aria-label={label}
+          value={value}
+          onChange={(e) => onChange?.(e.target.value)}
+          className="flex-1 bg-transparent outline-none min-w-0"
+          style={{ fontSize: 14, color: "#0f172a" }}
+        />
+      </div>
+    </label>
   );
 }

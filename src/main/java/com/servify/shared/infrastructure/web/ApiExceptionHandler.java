@@ -1,7 +1,9 @@
 package com.servify.shared.infrastructure.web;
 
 import com.servify.shared.domain.exception.BusinessRuleException;
+import com.servify.shared.domain.exception.ForbiddenException;
 import com.servify.shared.domain.exception.NotFoundException;
+import com.servify.shared.domain.exception.UnauthorizedException;
 import com.servify.shared.domain.exception.ValidationException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(NotFoundException exception, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, exception, request);
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiError> handleUnauthorized(UnauthorizedException exception, HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, exception, request);
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiError> handleForbidden(ForbiddenException exception, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, exception, request);
     }
 
     @ExceptionHandler({

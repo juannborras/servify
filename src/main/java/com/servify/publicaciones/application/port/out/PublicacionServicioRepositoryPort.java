@@ -1,6 +1,7 @@
 package com.servify.publicaciones.application.port.out;
 
 import com.servify.publicaciones.domain.model.PublicacionServicio;
+import com.servify.publicaciones.domain.enumtype.EstadoPublicacion;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,13 @@ public interface PublicacionServicioRepositoryPort {
     List<PublicacionServicio> buscarPorUsuarioId(UUID usuarioId);
 
     List<PublicacionServicio> buscarActivas();
+
+    default List<PublicacionServicio> buscarPorEstado(EstadoPublicacion estado) {
+        if (EstadoPublicacion.ACTIVA.equals(estado)) {
+            return buscarActivas();
+        }
+        return List.of();
+    }
 
     List<PublicacionServicio> buscarActivasPorCategoria(UUID categoriaServicioId);
 

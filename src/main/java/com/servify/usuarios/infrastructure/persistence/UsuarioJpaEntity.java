@@ -14,6 +14,9 @@ public class UsuarioJpaEntity {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
+    @Column(name = "nombre_usuario", nullable = false, unique = true)
+    private String nombreUsuario;
+
     @Column(name = "telefono")
     private String telefono;
 
@@ -41,6 +44,8 @@ public class UsuarioJpaEntity {
     public void setId(Long id) { this.id = id; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getNombreUsuario() { return nombreUsuario; }
+    public void setNombreUsuario(String nombreUsuario) { this.nombreUsuario = nombreUsuario; }
     public String getTelefono() { return telefono; }
     public void setTelefono(String telefono) { this.telefono = telefono; }
     public String getRol() { return rol; }

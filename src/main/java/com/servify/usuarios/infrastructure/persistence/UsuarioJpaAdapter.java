@@ -144,13 +144,24 @@ public class UsuarioJpaAdapter implements UsuarioRepositoryPort,
 
     @Override
     public Optional<Usuario> buscarPorEmail(String email) {
-        return usuarioRepo.findByEmail(email)
+        return usuarioRepo.findByEmailIgnoreCase(email)
                 .map(e -> toDomain(e, perfilRepo.findByUsuarioId(e.getId()).orElse(null)));
     }
 
     @Override
     public boolean existePorEmail(String email) {
-        return usuarioRepo.existsByEmail(email);
+        return usuarioRepo.existsByEmailIgnoreCase(email);
+    }
+
+    @Override
+    public Optional<Usuario> buscarPorNombreUsuario(String nombreUsuario) {
+        return usuarioRepo.findByNombreUsuarioIgnoreCase(nombreUsuario)
+                .map(e -> toDomain(e, perfilRepo.findByUsuarioId(e.getId()).orElse(null)));
+    }
+
+    @Override
+    public boolean existePorNombreUsuario(String nombreUsuario) {
+        return usuarioRepo.existsByNombreUsuarioIgnoreCase(nombreUsuario);
     }
 
     @Override
@@ -188,6 +199,11 @@ public class UsuarioJpaAdapter implements UsuarioRepositoryPort,
                 .orElse(false);
     }
 
+    @Override
+    public Optional<UUID> buscarUsuarioIdPorNombreUsuario(String nombreUsuario) {
+        return buscarPorNombreUsuario(nombreUsuario).map(Usuario::getId);
+    }
+
     // ── UsuarioAdministrablePort ─────────────────────────────
 
     @Override
@@ -213,6 +229,7 @@ public class UsuarioJpaAdapter implements UsuarioRepositoryPort,
                     .filter(ex -> uuidFromLong(ex.getId()).equals(u.getId()))
                     .findFirst().ifPresent(ex -> e.setId(ex.getId()));
         }
+        e.setNombreUsuario(u.getNombreUsuario());
         e.setEmail(u.getContacto() != null ? u.getContacto().getEmail() : null);
         e.setTelefono(u.getContacto() != null ? u.getContacto().getTelefono() : null);
         e.setRol(u.getRol() != null ? u.getRol().name().toLowerCase() : null);
@@ -227,6 +244,7 @@ public class UsuarioJpaAdapter implements UsuarioRepositoryPort,
         PerfilUsuario perfil = perfilEntity != null ? perfilAdapter.toDomain(perfilEntity) : null;
         Usuario u = new Usuario(
                 uuidFromLong(e.getId()),
+                e.getNombreUsuario(),
                 new Contacto(e.getEmail(), e.getTelefono()),
                 Rol.valueOf(e.getRol().toUpperCase()),
                 EstadoUsuario.valueOf(e.getEstado().toUpperCase()),

@@ -2,6 +2,7 @@ package com.servify.shared.infrastructure.config;
 
 import com.servify.administracion.application.port.in.ActualizarConfiguracionGeneralUseCase;
 import com.servify.administracion.application.port.in.AplicarMedidaAdministrativaUsuarioUseCase;
+import com.servify.administracion.application.port.in.ListarPublicacionesAdminUseCase;
 import com.servify.administracion.application.port.in.ModerarPublicacionUseCase;
 import com.servify.administracion.application.port.in.ObtenerConfiguracionGeneralUseCase;
 import com.servify.administracion.application.port.in.ObtenerMedidasAdministrativasDeUsuarioUseCase;
@@ -11,6 +12,7 @@ import com.servify.administracion.application.port.out.PublicacionModerablePort;
 import com.servify.administracion.application.port.out.UsuarioAdministrablePort;
 import com.servify.administracion.application.service.ActualizarConfiguracionGeneralService;
 import com.servify.administracion.application.service.AplicarMedidaAdministrativaUsuarioService;
+import com.servify.administracion.application.service.ListarPublicacionesAdminService;
 import com.servify.administracion.application.service.ModerarPublicacionService;
 import com.servify.administracion.application.service.ObtenerConfiguracionGeneralService;
 import com.servify.administracion.application.service.ObtenerMedidasAdministrativasDeUsuarioService;
@@ -31,6 +33,13 @@ import com.servify.autenticacion.application.service.CerrarSesionService;
 import com.servify.autenticacion.application.service.IniciarSesionService;
 import com.servify.autenticacion.application.service.RegistrarCredencialesService;
 import com.servify.autenticacion.application.service.RenovarTokenService;
+import com.servify.notificaciones.application.port.in.CrearNotificacionUsuarioUseCase;
+import com.servify.notificaciones.application.port.in.ListarNotificacionesUsuarioUseCase;
+import com.servify.notificaciones.application.port.in.MarcarNotificacionLeidaUseCase;
+import com.servify.notificaciones.application.port.out.NotificacionUsuarioRepositoryPort;
+import com.servify.notificaciones.application.service.CrearNotificacionUsuarioService;
+import com.servify.notificaciones.application.service.ListarNotificacionesUsuarioService;
+import com.servify.notificaciones.application.service.MarcarNotificacionLeidaService;
 import com.servify.publicaciones.application.port.in.ActualizarCategoriaServicioUseCase;
 import com.servify.publicaciones.application.port.in.ActualizarPublicacionUseCase;
 import com.servify.publicaciones.application.port.in.BuscarPublicacionesCompatiblesUseCase;
@@ -105,6 +114,8 @@ import com.servify.solicitudes.domain.service.PoliticaAsignacionUnica;
 import com.servify.solicitudes.domain.service.PoliticaCalificacion;
 import com.servify.solicitudes.domain.service.PoliticaFinalizacionMutua;
 import com.servify.usuarios.application.port.in.ActualizarPerfilUsuarioUseCase;
+import com.servify.usuarios.application.port.in.ActualizarCuentaUsuarioUseCase;
+import com.servify.usuarios.application.port.in.BuscarPrestadoresPublicosUseCase;
 import com.servify.usuarios.application.port.in.CambiarEstadoUsuarioUseCase;
 import com.servify.usuarios.application.port.in.CrearUsuarioUseCase;
 import com.servify.usuarios.application.port.in.ListarUsuariosUseCase;
@@ -114,6 +125,8 @@ import com.servify.usuarios.application.port.in.ObtenerReputacionUsuarioUseCase;
 import com.servify.usuarios.application.port.out.PerfilUsuarioRepositoryPort;
 import com.servify.usuarios.application.port.out.UsuarioRepositoryPort;
 import com.servify.usuarios.application.service.ActualizarPerfilUsuarioService;
+import com.servify.usuarios.application.service.ActualizarCuentaUsuarioService;
+import com.servify.usuarios.application.service.BuscarPrestadoresPublicosService;
 import com.servify.usuarios.application.service.CambiarEstadoUsuarioService;
 import com.servify.usuarios.application.service.CrearUsuarioService;
 import com.servify.usuarios.application.service.ListarUsuariosService;
@@ -178,6 +191,11 @@ public class MvpUseCaseConfiguration {
     }
 
     @Bean
+    ActualizarCuentaUsuarioUseCase actualizarCuentaUsuarioUseCase(UsuarioRepositoryPort usuarioRepositoryPort) {
+        return new ActualizarCuentaUsuarioService(usuarioRepositoryPort);
+    }
+
+    @Bean
     ActualizarPerfilUsuarioUseCase actualizarPerfilUsuarioUseCase(
             UsuarioRepositoryPort usuarioRepositoryPort,
             PerfilUsuarioRepositoryPort perfilUsuarioRepositoryPort,
@@ -213,6 +231,19 @@ public class MvpUseCaseConfiguration {
     @Bean
     CambiarEstadoUsuarioUseCase cambiarEstadoUsuarioUseCase(UsuarioRepositoryPort usuarioRepositoryPort) {
         return new CambiarEstadoUsuarioService(usuarioRepositoryPort);
+    }
+
+    @Bean
+    BuscarPrestadoresPublicosUseCase buscarPrestadoresPublicosUseCase(
+            UsuarioRepositoryPort usuarioRepositoryPort,
+            PublicacionServicioRepositoryPort publicacionServicioRepositoryPort,
+            CalificacionRepositoryPort calificacionRepositoryPort
+    ) {
+        return new BuscarPrestadoresPublicosService(
+                usuarioRepositoryPort,
+                publicacionServicioRepositoryPort,
+                calificacionRepositoryPort
+        );
     }
 
     @Bean
@@ -591,6 +622,13 @@ public class MvpUseCaseConfiguration {
     }
 
     @Bean
+    ListarPublicacionesAdminUseCase listarPublicacionesAdminUseCase(
+            PublicacionServicioRepositoryPort publicacionServicioRepositoryPort
+    ) {
+        return new ListarPublicacionesAdminService(publicacionServicioRepositoryPort);
+    }
+
+    @Bean
     ObtenerConfiguracionGeneralUseCase obtenerConfiguracionGeneralUseCase(
             ConfiguracionGeneralRepositoryPort configuracionGeneralRepositoryPort
     ) {
@@ -624,5 +662,26 @@ public class MvpUseCaseConfiguration {
             MedidaAdministrativaUsuarioRepositoryPort medidaAdministrativaUsuarioRepositoryPort
     ) {
         return new ObtenerMedidasAdministrativasDeUsuarioService(medidaAdministrativaUsuarioRepositoryPort);
+    }
+
+    @Bean
+    CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase(
+            NotificacionUsuarioRepositoryPort notificacionUsuarioRepositoryPort
+    ) {
+        return new CrearNotificacionUsuarioService(notificacionUsuarioRepositoryPort);
+    }
+
+    @Bean
+    ListarNotificacionesUsuarioUseCase listarNotificacionesUsuarioUseCase(
+            NotificacionUsuarioRepositoryPort notificacionUsuarioRepositoryPort
+    ) {
+        return new ListarNotificacionesUsuarioService(notificacionUsuarioRepositoryPort);
+    }
+
+    @Bean
+    MarcarNotificacionLeidaUseCase marcarNotificacionLeidaUseCase(
+            NotificacionUsuarioRepositoryPort notificacionUsuarioRepositoryPort
+    ) {
+        return new MarcarNotificacionLeidaService(notificacionUsuarioRepositoryPort);
     }
 }

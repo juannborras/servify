@@ -27,6 +27,7 @@ import com.servify.usuarios.domain.valueobject.NombreCompleto;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
+import java.text.Normalizer;
 import java.util.UUID;
 
 public class AutenticarConIdentidadExternaService implements AutenticarConIdentidadExternaUseCase {
@@ -194,6 +195,7 @@ public class AutenticarConIdentidadExternaService implements AutenticarConIdenti
                                                LocalDateTime ahora) {
         Usuario usuario = new Usuario(
                 generarIdUsuario(),
+                generarNombreUsuarioSocial(identidadVerificada),
                 new Contacto(email, normalizarTextoOpcional(command.getTelefono())),
                 command.getRolSolicitado() != null ? command.getRolSolicitado() : Rol.USUARIO,
                 EstadoUsuario.ACTIVO,
@@ -237,6 +239,45 @@ public class AutenticarConIdentidadExternaService implements AutenticarConIdenti
         String nombre = partes[0];
         String apellido = partes.length > 1 ? partes[1] : "Usuario";
         return new NombreCompleto(nombre, apellido);
+    }
+
+    private String generarNombreUsuarioSocial(IdentidadExternaVerificadaResult identidadVerificada) {
+        String base = normalizarTextoOpcional(identidadVerificada.getNombreMostrado());
+        if (base == null) {
+            String email = normalizarEmail(identidadVerificada.getEmail());
+            base = email.substring(0, email.indexOf("@"));
+        }
+
+        base = Normalizer.normalize(base, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", ".")
+                .replaceAll("^\\.+|\\.+$", "");
+        if (base.length() < 3) {
+            base = (base + ".user").replaceAll("^\\.+|\\.+$", "");
+        }
+        if (base.length() > 22) {
+            base = base.substring(0, 22).replaceAll("\\.+$", "");
+        }
+
+        for (int intento = 0; intento < 1000; intento++) {
+            String sufijo = intento == 0
+                    ? "." + Math.abs(UUID.randomUUID().hashCode() % 10000)
+                    : "." + intento + Math.abs(UUID.randomUUID().hashCode() % 1000);
+            String candidato = recortarNombreUsuario(base, sufijo);
+            if (!usuarioRepositoryPort.existePorNombreUsuario(candidato)) {
+                return candidato;
+            }
+        }
+
+        throw new IllegalStateException("No se pudo generar un nombre de usuario disponible");
+    }
+
+    private String recortarNombreUsuario(String base, String sufijo) {
+        int maxBaseLength = Math.max(3, 30 - sufijo.length());
+        String recortado = base.length() > maxBaseLength ? base.substring(0, maxBaseLength) : base;
+        recortado = recortado.replaceAll("\\.+$", "");
+        return recortado + sufijo;
     }
 
     private Ubicacion ubicacionInicialMvp() {

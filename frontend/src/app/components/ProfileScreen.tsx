@@ -57,6 +57,7 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [localidad, setLocalidad] = useState(LOCATION_OPTIONS[0]);
@@ -100,6 +101,7 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
         setPhotoUrl(storedPhoto || profile?.fotoPerfilUrl || "");
         setLocalidad(LOCATION_OPTIONS.includes(resolvedLocation) ? resolvedLocation : LOCATION_OPTIONS[0]);
         setEmail(prefs.email || accountConfig?.usuario?.email || user.email || "");
+        setUsername(accountConfig?.usuario?.nombreUsuario || user.username || "");
         setAvailabilityDayFrom(prefs.availabilityDayFrom || WEEK_DAYS[0].value);
         setAvailabilityDayTo(prefs.availabilityDayTo || WEEK_DAYS[4].value);
         setAvailabilityFrom(prefs.availabilityFrom || "09:00");
@@ -168,7 +170,7 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
   const availabilityDayFromLabel = WEEK_DAYS.find((day) => day.value === availabilityDayFrom)?.label ?? "Lunes";
   const availabilityDayToLabel = WEEK_DAYS.find((day) => day.value === availabilityDayTo)?.label ?? "Viernes";
   const availabilityLabel = `${availabilityDayFromLabel} a ${availabilityDayToLabel}, ${availabilityFrom} - ${availabilityTo}`;
-  const canSave = Boolean(firstName.trim() && lastName.trim() && email.trim() && availabilityDayFrom && availabilityDayTo && availabilityFrom && availabilityTo);
+  const canSave = Boolean(firstName.trim() && lastName.trim() && username.trim() && email.trim() && availabilityDayFrom && availabilityDayTo && availabilityFrom && availabilityTo);
 
   const handleProfilePhotoSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -256,6 +258,10 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
         descripcionPersonal: `Disponibilidad ${availabilityFrom}-${availabilityTo}`,
       });
 
+      const account = await servifyApi.updateAccount(user.id, {
+        nombreUsuario: username.trim(),
+      });
+
       servifyApi.saveProfilePreferences(user.id, {
         email: email.trim(),
         availabilityDayFrom,
@@ -272,6 +278,7 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
       onUserUpdated({
         name: `${firstName.trim()} ${lastName.trim()}`.trim(),
         email: email.trim(),
+        username: account.nombreUsuario,
         role: accountRole,
       });
 
@@ -374,6 +381,7 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
           </p>
           <div className="flex flex-col gap-3.5">
             <InfoRow icon={<Mail size={15} color="#0891b2" strokeWidth={1.8} />} label="Email" value={email || user.email} />
+            <InfoRow icon={<User size={15} color="#2563eb" strokeWidth={1.8} />} label="Usuario" value={username ? `@${username}` : "Sin usuario"} />
             <InfoRow icon={<MapPin size={15} color="#ef4444" strokeWidth={1.8} />} label="Localidad" value={localidad || LOCATION_OPTIONS[0]} />
             <InfoRow icon={<Briefcase size={15} color="#7c3aed" strokeWidth={1.8} />} label="Tipo de cuenta" value={roleLabel[accountRole]} />
             <InfoRow icon={<Clock size={15} color="#d97706" strokeWidth={1.8} />} label="Horario" value={availabilityLabel} />
@@ -391,6 +399,10 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
               <div className="grid grid-cols-2 gap-2">
                 <ProfileInput label="Nombre" value={firstName} onChange={setFirstName} />
                 <ProfileInput label="Apellido" value={lastName} onChange={setLastName} />
+              </div>
+
+              <div className="mt-2">
+                <ProfileInput label="Nombre de usuario" value={username} onChange={setUsername} />
               </div>
 
               <div className="mt-2">

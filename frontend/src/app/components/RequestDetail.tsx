@@ -326,8 +326,8 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   const st = statusConfig[displayStatus] ?? statusConfig.open;
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "#f8fafc" }}>
-      <div className="bg-white px-5 pt-12 pb-4">
+    <div className="servify-dark-screen flex flex-col h-full" style={{ background: "#f8fafc" }}>
+      <div className="servify-page-header bg-white px-5 pt-12 pb-4">
         <button onClick={onBack} className="flex items-center gap-2 mb-4">
           <ChevronLeft size={20} color="#2563eb" strokeWidth={2} />
           <span style={{ fontSize: 14, color: "#2563eb", fontWeight: 600 }}>Volver</span>
@@ -338,7 +338,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
             {request.title}
           </h1>
           <span
-            className="px-3 py-1.5 rounded-full shrink-0"
+            className="servify-status-badge px-3 py-1.5 rounded-full shrink-0"
             style={{ background: st.bg, color: st.color, fontSize: 12, fontWeight: 700 }}
           >
             {st.label}
@@ -399,7 +399,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               </div>
             </div>
 
-            <div className="p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <div className="servify-form-surface p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>
                 {pendingCounterOffer?.mensaje || "El prestador no agrego un mensaje."}
               </p>
@@ -476,7 +476,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               </div>
             </div>
 
-            <div className="p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <div className="servify-form-surface p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{proposalMessage}</p>
             </div>
           </Card>
@@ -484,7 +484,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
 
         {hasProposal && !isCompleted && (
           <Card title="Confirmar finalización">
-            <div className="rounded-2xl p-4" style={{ background: "#ffffff", border: "1.5px solid #dfe7f2" }}>
+            <div className="servify-form-surface rounded-2xl p-4" style={{ background: "#ffffff", border: "1.5px solid #dfe7f2" }}>
               <div className="flex items-center justify-between gap-3">
                 <ConfirmationPill
                   label="Solicitante"
@@ -553,7 +553,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="rounded-2xl p-4 flex flex-col items-center gap-3"
+              className="servify-success-card rounded-2xl p-4 flex flex-col items-center gap-3"
               style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0" }}
             >
               <CheckCircle size={32} color="#16a34a" strokeWidth={1.8} />
@@ -635,7 +635,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+    <div className="servify-card servify-request-card bg-white rounded-2xl p-4" style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
       <p style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 12 }}>
         {title}
       </p>

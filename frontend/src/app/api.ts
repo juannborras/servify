@@ -6,7 +6,9 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  username?: string;
   role: RoleType;
+  apiRole?: ApiRole;
   accessToken?: string;
   refreshToken?: string;
 }
@@ -150,6 +152,9 @@ export interface ApiPublication {
   disponibilidadesHorarias?: ApiAvailability[];
   precioBase?: number;
   estado?: string;
+  puedeParticiparEnDistribucion?: boolean;
+  fechaCreacion?: string;
+  fechaUltimaModificacion?: string;
 }
 
 export interface ApiRequest {
@@ -258,6 +263,7 @@ export interface ApiAccountConfig {
   usuario: {
     id: string;
     email: string;
+    nombreUsuario?: string;
     telefono?: string;
     rol?: ApiRole;
   };
@@ -268,6 +274,61 @@ export interface ApiRatingSummary {
   usuarioId: string;
   cantidadValoraciones: number;
   promedioEstrellas: number;
+}
+
+export type ApiUserState = "ACTIVO" | "SUSPENDIDO" | "BLOQUEADO" | "INACTIVO";
+export type ApiPublicationState = "ACTIVA" | "INACTIVA" | "PAUSADA" | "BLOQUEADA" | "ELIMINADA";
+
+export interface ApiAdminUser {
+  id: string;
+  email?: string;
+  nombreUsuario?: string;
+  telefono?: string;
+  rol?: ApiRole;
+  estado?: ApiUserState;
+  estadoValidacionIdentidad?: string;
+  fechaRegistro?: string;
+}
+
+export interface ApiNotification {
+  id: string;
+  usuarioId: string;
+  tipo: "MODERACION_PUBLICACION" | "MODERACION_USUARIO";
+  titulo: string;
+  mensaje: string;
+  referenciaTipo?: string;
+  referenciaId?: string;
+  leida: boolean;
+  fechaCreacion?: string;
+  fechaLectura?: string;
+}
+
+export interface ApiPublicProvider {
+  usuarioId: string;
+  nombreUsuario: string;
+  nombre?: string;
+  apellido?: string;
+  fotoPerfilUrl?: string;
+  descripcionPersonal?: string;
+  localidad?: string;
+  cantidadPublicacionesActivas: number;
+  categorias: string[];
+  servicios: string[];
+  zonasCobertura: string[];
+  precioDesde?: number;
+  publicacionesActivas?: ApiPublicProviderPublication[];
+  cantidadValoraciones: number;
+  promedioEstrellas: number;
+}
+
+export interface ApiPublicProviderPublication {
+  id: string;
+  titulo: string;
+  descripcion?: string;
+  categoria?: string;
+  modalidadServicio?: ApiModality;
+  zonasCobertura?: string[];
+  precioBase?: number;
 }
 
 export interface ApiServiceRating {
@@ -308,12 +369,14 @@ const PROFILE_PHOTO_PREFIX = "servify.profile-photo.";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
+  const token = getStoredAccessToken();
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers ?? {}),
       },
     });
@@ -328,17 +391,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hasJsonBody = rawText.trim().length > 0 && contentType.includes("application/json");
 
   if (!response.ok) {
-    let message = `Error ${response.status}`;
+    let message = buildHttpErrorMessage(response.status, response.statusText, rawText, hasJsonBody);
 
     if (hasJsonBody) {
       try {
         const body = JSON.parse(rawText) as { message?: string; error?: string };
-        message = body.message ?? body.error ?? message;
+        message = cleanErrorMessage(body.message ?? body.error ?? message, response.status, response.statusText);
       } catch {
-        message = rawText || message;
+        message = buildHttpErrorMessage(response.status, response.statusText, rawText, false);
       }
-    } else if (rawText.trim()) {
-      message = rawText;
     }
 
     throw new Error(message);
@@ -353,6 +414,35 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   return JSON.parse(rawText) as T;
+}
+
+function buildHttpErrorMessage(status: number, statusText: string, rawText: string, isJson: boolean): string {
+  const fallback = `Error ${status}${statusText ? ` ${statusText}` : ""}`;
+  if (isJson) return fallback;
+  return cleanErrorMessage(rawText || fallback, status, statusText);
+}
+
+function cleanErrorMessage(rawMessage: string, status: number, statusText: string): string {
+  const trimmed = rawMessage.trim();
+  const looksLikeHtml = /^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed) || /<\/?[a-z][\s\S]*>/i.test(trimmed);
+  if (!looksLikeHtml) {
+    return trimmed || `Error ${status}${statusText ? ` ${statusText}` : ""}`;
+  }
+
+  const title = trimmed.match(/<title>(.*?)<\/title>/i)?.[1];
+  const heading = trimmed.match(/<h1>(.*?)<\/h1>/i)?.[1];
+  const extracted = stripHtml(title || heading || "").trim();
+  const statusLabel = extracted || `${status}${statusText ? ` ${statusText}` : ""}`;
+
+  if (status >= 500) {
+    return `Backend no disponible (${statusLabel}). Verifica que la API este levantada y que las migraciones de base de datos esten aplicadas.`;
+  }
+
+  return `La API devolvio una respuesta inesperada (${statusLabel}).`;
+}
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 export const servifyApi = {
@@ -419,7 +509,7 @@ export const servifyApi = {
     localStorage.setItem(PROFILE_PREFS_KEY, JSON.stringify(all));
   },
 
-  async login(email: string, password: string): Promise<SessionUser> {
+  async login(identifier: string, password: string): Promise<SessionUser> {
     const session = await request<{
       usuarioId: string;
       emailAcceso?: string;
@@ -427,15 +517,23 @@ export const servifyApi = {
       refreshToken?: { token: string };
     }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ emailAcceso: email, passwordPlano: password }),
+      body: JSON.stringify({ emailAcceso: identifier, passwordPlano: password }),
     });
 
+    const [accountConfig, profile] = await Promise.all([
+      this.getAccountConfig(session.usuarioId).catch(() => null),
+      this.getUserProfile(session.usuarioId).catch(() => null),
+    ]);
     const prefs = this.getProfilePreferences(session.usuarioId);
+    const email = accountConfig?.usuario.email ?? session.emailAcceso ?? identifier;
+    const displayName = `${profile?.nombre ?? ""} ${profile?.apellido ?? ""}`.trim();
     const user: SessionUser = {
       id: session.usuarioId,
-      name: email.split("@")[0] || "Usuario",
+      name: displayName || email.split("@")[0] || "Usuario",
       email,
+      username: accountConfig?.usuario.nombreUsuario,
       role: prefs.role ?? "both",
+      apiRole: accountConfig?.usuario.rol,
       accessToken: session.accessToken?.token,
       refreshToken: session.refreshToken?.token,
     };
@@ -458,14 +556,19 @@ export const servifyApi = {
     });
 
     const email = session.emailAcceso ?? "google-user@servify.local";
-    const profile = await this.getUserProfile(session.usuarioId).catch(() => null);
+    const [accountConfig, profile] = await Promise.all([
+      this.getAccountConfig(session.usuarioId).catch(() => null),
+      this.getUserProfile(session.usuarioId).catch(() => null),
+    ]);
     const prefs = this.getProfilePreferences(session.usuarioId);
     const displayName = `${profile?.nombre ?? ""} ${profile?.apellido ?? ""}`.trim();
     const user: SessionUser = {
       id: session.usuarioId,
       name: displayName || email.split("@")[0] || "Usuario",
-      email,
+      email: accountConfig?.usuario.email ?? email,
+      username: accountConfig?.usuario.nombreUsuario,
       role: prefs.role ?? "both",
+      apiRole: accountConfig?.usuario.rol,
       accessToken: session.accessToken?.token,
       refreshToken: session.refreshToken?.token,
     };
@@ -476,8 +579,11 @@ export const servifyApi = {
   async register(input: {
     nombre: string;
     apellido: string;
+    nombreUsuario: string;
     email: string;
     password: string;
+    fechaNacimiento?: string;
+    profilePhotoDataUrl?: string;
     localidad: string;
     disponibilidadDiaDesde?: string;
     disponibilidadDiaHasta?: string;
@@ -489,6 +595,7 @@ export const servifyApi = {
       method: "POST",
       body: JSON.stringify({
         email: input.email,
+        nombreUsuario: input.nombreUsuario,
         telefono: "Sin telefono",
         rol: "USUARIO" satisfies ApiRole,
       }),
@@ -508,7 +615,7 @@ export const servifyApi = {
       body: JSON.stringify({
         nombre: input.nombre || "Nuevo",
         apellido: input.apellido || "Usuario",
-        edad: 25,
+        edad: ageFromBirthDate(input.fechaNacimiento) ?? 25,
         fotoPerfilUrl: "",
         ubicacion: buildLocation(input.localidad),
         descripcionPersonal:
@@ -520,8 +627,13 @@ export const servifyApi = {
       id: usuario.id,
       name: `${input.nombre || "Nuevo"} ${input.apellido || "Usuario"}`.trim(),
       email: input.email,
+      username: input.nombreUsuario,
       role: input.role,
+      apiRole: "USUARIO",
     };
+    if (input.profilePhotoDataUrl) {
+      this.saveProfilePhoto(usuario.id, input.profilePhotoDataUrl);
+    }
     if (input.role) {
       this.saveProfilePreferences(usuario.id, {
         role: input.role,
@@ -658,6 +770,15 @@ export const servifyApi = {
 
   listUserPublications(usuarioId: string) {
     return request<ApiPublication[]>(`/usuarios/${usuarioId}/publicaciones`);
+  },
+
+  searchProvidersByUsername(nombreUsuario = "") {
+    const params = new URLSearchParams();
+    if (nombreUsuario.trim()) {
+      params.set("nombreUsuario", nombreUsuario.trim());
+    }
+    const query = params.toString();
+    return request<ApiPublicProvider[]>(`/prestadores${query ? `?${query}` : ""}`);
   },
 
   async changePublicationState(publicacionId: string, usuarioId: string, active: boolean) {
@@ -874,6 +995,13 @@ export const servifyApi = {
     return request<ApiAccountConfig>(`/usuarios/${userId}/cuenta`);
   },
 
+  updateAccount(userId: string, input: { nombreUsuario: string }) {
+    return request<ApiAccountConfig["usuario"]>(`/usuarios/${userId}/cuenta`, {
+      method: "PATCH",
+      body: JSON.stringify({ nombreUsuario: input.nombreUsuario }),
+    });
+  },
+
   getUserProfile(userId: string) {
     return request<ApiUserProfile>(`/usuarios/${userId}/perfil`);
   },
@@ -905,7 +1033,56 @@ export const servifyApi = {
       }),
     });
   },
+
+  getAdminSession() {
+    return request<ApiAdminUser>("/admin/me");
+  },
+
+  listAdminPublications(estado: ApiPublicationState = "ACTIVA") {
+    const params = new URLSearchParams({ estado });
+    return request<ApiPublication[]>(`/admin/publicaciones?${params.toString()}`);
+  },
+
+  moderatePublication(publicacionId: string, input: { estadoDestino: ApiPublicationState; motivo: string }) {
+    return request<void>(`/admin/publicaciones/${publicacionId}/moderacion`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
+
+  listAdminUsers(estado: ApiUserState = "ACTIVO") {
+    const params = new URLSearchParams({ estado });
+    return request<ApiAdminUser[]>(`/admin/usuarios?${params.toString()}`);
+  },
+
+  changeAdminUserState(usuarioId: string, input: { nuevoEstado: ApiUserState; motivo: string }) {
+    return request<void>(`/admin/usuarios/${usuarioId}/estado`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
+
+  listNotifications(usuarioId: string) {
+    return request<ApiNotification[]>(`/usuarios/${usuarioId}/notificaciones`);
+  },
+
+  markNotificationRead(usuarioId: string, notificacionId: string) {
+    return request<ApiNotification>(`/usuarios/${usuarioId}/notificaciones/${notificacionId}/lectura`, {
+      method: "PATCH",
+    });
+  },
 };
+
+function getStoredAccessToken(): string {
+  if (typeof localStorage === "undefined") return "";
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return "";
+  try {
+    return (JSON.parse(raw) as SessionUser).accessToken ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export function buildLocation(localidad = "CABA", direccion = ""): ApiLocation {
   const [calle, altura] = splitAddress(direccion);
@@ -1048,4 +1225,17 @@ function normalizeReceivedRequest(request: ApiReceivedRequest): ApiReceivedReque
     estado: request.estado ?? request.estadoDistribucion,
     fechaSolicitud: request.fechaSolicitud ?? request.fechaEnvio,
   };
+}
+
+function ageFromBirthDate(value?: string): number | undefined {
+  if (!value) return undefined;
+  const birthDate = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return undefined;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age > 0 ? age : undefined;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, FileText, AlignLeft, MapPin, DollarSign, Clock, CheckCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, servifyApi } from "../api";
@@ -10,25 +10,50 @@ const categories = [
 
 interface NewRequestModalProps {
   userId?: string;
+  initialValues?: NewRequestInitialValues;
   onClose: () => void;
   onCreated: () => void;
 }
 
-export function NewRequestModal({ userId, onClose, onCreated }: NewRequestModalProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
-  const [modality, setModality] = useState<string | null>(null);
-  const [location, setLocation] = useState(LOCATION_OPTIONS[0]);
-  const [availabilityDay, setAvailabilityDay] = useState(WEEK_DAYS[0].value);
-  const [availabilityFrom, setAvailabilityFrom] = useState("09:00");
-  const [availabilityTo, setAvailabilityTo] = useState("18:00");
-  const [price, setPrice] = useState("");
+export interface NewRequestInitialValues {
+  title?: string;
+  description?: string;
+  category?: string;
+  modality?: string;
+  location?: string;
+  availabilityDay?: string;
+  availabilityFrom?: string;
+  availabilityTo?: string;
+  price?: string;
+}
+
+export function NewRequestModal({ userId, initialValues, onClose, onCreated }: NewRequestModalProps) {
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [description, setDescription] = useState(initialValues?.description ?? "");
+  const [category, setCategory] = useState<string | null>(initialValues?.category ?? null);
+  const [modality, setModality] = useState<string | null>(initialValues?.modality ?? null);
+  const [location, setLocation] = useState(initialValues?.location ?? LOCATION_OPTIONS[0]);
+  const [availabilityDay, setAvailabilityDay] = useState(initialValues?.availabilityDay ?? WEEK_DAYS[0].value);
+  const [availabilityFrom, setAvailabilityFrom] = useState(initialValues?.availabilityFrom ?? "09:00");
+  const [availabilityTo, setAvailabilityTo] = useState(initialValues?.availabilityTo ?? "18:00");
+  const [price, setPrice] = useState(initialValues?.price ?? "");
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const canCreate = Boolean(userId && title && description && category);
+
+  useEffect(() => {
+    setTitle(initialValues?.title ?? "");
+    setDescription(initialValues?.description ?? "");
+    setCategory(initialValues?.category ?? null);
+    setModality(initialValues?.modality ?? null);
+    setLocation(initialValues?.location ?? LOCATION_OPTIONS[0]);
+    setAvailabilityDay(initialValues?.availabilityDay ?? WEEK_DAYS[0].value);
+    setAvailabilityFrom(initialValues?.availabilityFrom ?? "09:00");
+    setAvailabilityTo(initialValues?.availabilityTo ?? "18:00");
+    setPrice(initialValues?.price ?? "");
+  }, [initialValues]);
 
   const handleCreate = async () => {
     if (!canCreate) return;
@@ -82,8 +107,12 @@ export function NewRequestModal({ userId, onClose, onCreated }: NewRequestModalP
 
         <div className="flex items-center justify-between px-6 pb-4 shrink-0">
           <div>
-            <p style={{ fontSize: 19, fontWeight: 800, color: "#0f172a" }}>Nueva solicitud</p>
-            <p style={{ fontSize: 13, color: "#64748b" }}>Describí lo que necesitás</p>
+            <p style={{ fontSize: 19, fontWeight: 800, color: "#0f172a" }}>
+              {initialValues ? "Repetir solicitud" : "Nueva solicitud"}
+            </p>
+            <p style={{ fontSize: 13, color: "#64748b" }}>
+              {initialValues ? "Revisá los datos y publicala de nuevo" : "Describí lo que necesitás"}
+            </p>
           </div>
           <button onClick={onClose}>
             <X size={22} color="#94a3b8" strokeWidth={1.8} />
