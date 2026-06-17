@@ -22,6 +22,7 @@ public class PrestadorPublicoResult {
     private final List<PublicacionActivaResult> publicacionesActivas;
     private final Integer cantidadValoraciones;
     private final Double promedioEstrellas;
+    private final List<ResenaPublicaResult> resenasDestacadas;
 
     public PrestadorPublicoResult(
             UUID usuarioId,
@@ -38,7 +39,8 @@ public class PrestadorPublicoResult {
             BigDecimal precioDesde,
             List<PublicacionActivaResult> publicacionesActivas,
             Integer cantidadValoraciones,
-            Double promedioEstrellas
+            Double promedioEstrellas,
+            List<ResenaPublicaResult> resenasDestacadas
     ) {
         this.usuarioId = usuarioId;
         this.nombreUsuario = nombreUsuario;
@@ -55,6 +57,7 @@ public class PrestadorPublicoResult {
         this.publicacionesActivas = publicacionesActivas;
         this.cantidadValoraciones = cantidadValoraciones;
         this.promedioEstrellas = promedioEstrellas;
+        this.resenasDestacadas = resenasDestacadas;
     }
 
     public UUID getUsuarioId() {
@@ -117,6 +120,10 @@ public class PrestadorPublicoResult {
         return promedioEstrellas;
     }
 
+    public List<ResenaPublicaResult> getResenasDestacadas() {
+        return resenasDestacadas;
+    }
+
     public static class PublicacionActivaResult {
         private final UUID id;
         private final String titulo;
@@ -170,6 +177,30 @@ public class PrestadorPublicoResult {
 
         public BigDecimal getPrecioBase() {
             return precioBase;
+        }
+    }
+
+    public static class ResenaPublicaResult {
+        private final Integer puntaje;
+        private final String comentario;
+        private final java.time.LocalDateTime fechaCalificacion;
+
+        public ResenaPublicaResult(Integer puntaje, String comentario, java.time.LocalDateTime fechaCalificacion) {
+            this.puntaje = puntaje;
+            this.comentario = comentario;
+            this.fechaCalificacion = fechaCalificacion;
+        }
+
+        public Integer getPuntaje() {
+            return puntaje;
+        }
+
+        public String getComentario() {
+            return comentario;
+        }
+
+        public java.time.LocalDateTime getFechaCalificacion() {
+            return fechaCalificacion;
         }
     }
 }

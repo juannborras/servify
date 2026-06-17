@@ -13,8 +13,15 @@ import com.servify.administracion.domain.enumtype.TipoMedida;
 import com.servify.notificaciones.application.dto.CrearNotificacionUsuarioCommand;
 import com.servify.notificaciones.application.port.in.CrearNotificacionUsuarioUseCase;
 import com.servify.notificaciones.domain.enumtype.TipoNotificacion;
+import com.servify.publicaciones.application.dto.CategoriaServicioResult;
+import com.servify.publicaciones.application.dto.CambiarEstadoCategoriaServicioCommand;
+import com.servify.publicaciones.application.dto.CrearCategoriaServicioCommand;
 import com.servify.publicaciones.application.dto.PublicacionServicioResult;
+import com.servify.publicaciones.application.port.in.CambiarEstadoCategoriaServicioUseCase;
+import com.servify.publicaciones.application.port.in.CrearCategoriaServicioUseCase;
+import com.servify.publicaciones.application.port.in.ListarCategoriasUseCase;
 import com.servify.publicaciones.application.port.in.ObtenerPublicacionUseCase;
+import com.servify.publicaciones.domain.enumtype.EstadoCategoria;
 import com.servify.publicaciones.domain.enumtype.EstadoPublicacion;
 import com.servify.shared.domain.exception.ValidationException;
 import com.servify.usuarios.application.dto.CambiarEstadoUsuarioCommand;
@@ -31,6 +38,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -50,6 +58,9 @@ public class AdminApiController {
     private final ObtenerConfiguracionGeneralUseCase obtenerConfiguracionGeneralUseCase;
     private final ObtenerPublicacionUseCase obtenerPublicacionUseCase;
     private final CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase;
+    private final ListarCategoriasUseCase listarCategoriasUseCase;
+    private final CrearCategoriaServicioUseCase crearCategoriaServicioUseCase;
+    private final CambiarEstadoCategoriaServicioUseCase cambiarEstadoCategoriaServicioUseCase;
 
     public AdminApiController(
             AdminAuthorizationService adminAuthorizationService,
@@ -61,7 +72,10 @@ public class AdminApiController {
             ObtenerMedidasAdministrativasDeUsuarioUseCase obtenerMedidasAdministrativasDeUsuarioUseCase,
             ObtenerConfiguracionGeneralUseCase obtenerConfiguracionGeneralUseCase,
             ObtenerPublicacionUseCase obtenerPublicacionUseCase,
-            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase
+            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase,
+            ListarCategoriasUseCase listarCategoriasUseCase,
+            CrearCategoriaServicioUseCase crearCategoriaServicioUseCase,
+            CambiarEstadoCategoriaServicioUseCase cambiarEstadoCategoriaServicioUseCase
     ) {
         this.adminAuthorizationService = adminAuthorizationService;
         this.moderarPublicacionUseCase = moderarPublicacionUseCase;
@@ -73,6 +87,9 @@ public class AdminApiController {
         this.obtenerConfiguracionGeneralUseCase = obtenerConfiguracionGeneralUseCase;
         this.obtenerPublicacionUseCase = obtenerPublicacionUseCase;
         this.crearNotificacionUsuarioUseCase = crearNotificacionUsuarioUseCase;
+        this.listarCategoriasUseCase = listarCategoriasUseCase;
+        this.crearCategoriaServicioUseCase = crearCategoriaServicioUseCase;
+        this.cambiarEstadoCategoriaServicioUseCase = cambiarEstadoCategoriaServicioUseCase;
     }
 
     @GetMapping("/me")
@@ -173,8 +190,55 @@ public class AdminApiController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/categorias")
+    public ResponseEntity<List<CategoriaServicioResult>> listarCategorias(HttpServletRequest request) {
+        adminAuthorizationService.requireAdmin(request);
+        return ResponseEntity.ok(listarCategoriasUseCase.listarTodas());
+    }
+
+    @PostMapping("/categorias")
+    public ResponseEntity<CategoriaServicioResult> crearCategoria(
+            @RequestBody CrearCategoriaAdminRequest body,
+            HttpServletRequest request
+    ) {
+        adminAuthorizationService.requireAdmin(request);
+        if (body == null || body.nombre == null || body.nombre.isBlank()) {
+            throw new ValidationException("El nombre de la categoria es obligatorio");
+        }
+        CategoriaServicioResult result = crearCategoriaServicioUseCase.crear(
+                new CrearCategoriaServicioCommand(body.nombre.trim(), body.descripcion)
+        );
+        return ResponseEntity.ok(result);
+    }
+
+    @PatchMapping("/categorias/{categoriaId}/estado")
+    public ResponseEntity<CategoriaServicioResult> cambiarEstadoCategoria(
+            @PathVariable UUID categoriaId,
+            @RequestBody CambiarEstadoCategoriaAdminRequest body,
+            HttpServletRequest request
+    ) {
+        adminAuthorizationService.requireAdmin(request);
+        if (body == null || body.estadoDestino == null) {
+            throw new ValidationException("El estado destino es obligatorio");
+        }
+        CategoriaServicioResult result = cambiarEstadoCategoriaServicioUseCase.cambiarEstado(
+                new CambiarEstadoCategoriaServicioCommand(categoriaId, body.estadoDestino, body.motivo)
+        );
+        return ResponseEntity.ok(result);
+    }
+
     public static class ModerarPublicacionRequest {
         public String estadoDestino;
+        public String motivo;
+    }
+
+    public static class CrearCategoriaAdminRequest {
+        public String nombre;
+        public String descripcion;
+    }
+
+    public static class CambiarEstadoCategoriaAdminRequest {
+        public EstadoCategoria estadoDestino;
         public String motivo;
     }
 

@@ -11,11 +11,14 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  XCircle,
   MessageSquare,
+  Maximize2,
+  Send,
+  UserRound,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { ApiServiceRating, ApiUserProfile, SessionUser } from "../api";
+import type { ApiChatMessage, ApiPublicProvider, ApiServiceRating, ApiUserProfile, SessionUser } from "../api";
 import { formatMoney, servifyApi } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
 
@@ -27,7 +30,7 @@ export interface RatingTarget {
   prestadorId: string;
   calificadorId: string;
   rolCalificador: "SOLICITANTE" | "PRESTADOR";
-  onSubmitted?: (puntaje: number) => void;
+  onSubmitted?: (puntaje: number, comentario?: string) => void;
 }
 
 interface RequestDetailProps {
@@ -35,6 +38,7 @@ interface RequestDetailProps {
   onBack: () => void;
   onRate: (target: RatingTarget) => void;
   currentUser?: SessionUser | null;
+  onProviderPress?: (provider: ApiPublicProvider) => void;
 }
 
 const proposalData = {
@@ -48,7 +52,7 @@ const proposalData = {
 
 type AssignmentState = Awaited<ReturnType<typeof servifyApi.getAssignmentState>>;
 
-export function RequestDetail({ request, onBack, onRate, currentUser }: RequestDetailProps) {
+export function RequestDetail({ request, onBack, onRate, currentUser, onProviderPress }: RequestDetailProps) {
   const [assignmentState, setAssignmentState] = useState<AssignmentState | null>(null);
   const [providerProfileName, setProviderProfileName] = useState("");
   const [existingRating, setExistingRating] = useState<ApiServiceRating | null>(null);
@@ -56,6 +60,8 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   const [loadingState, setLoadingState] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState("");
 
   const applyLoadedAssignmentState = useCallback((state: AssignmentState) => {
@@ -157,6 +163,10 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   const isAcceptedProvider = Boolean(currentUser?.id && acceptedDistribution?.prestadorId === currentUser.id);
   const isCounterOfferProvider = Boolean(currentUser?.id && pendingCounterOffer?.prestadorId === currentUser.id);
   const hasProviderParticipation = isAssignedProvider || isAcceptedProvider || isCounterOfferProvider;
+  const displayRequesterName = isRequesterParticipant ? "Tu" : request.requesterName;
+  const displayRequesterInitials = isRequesterParticipant ? "TU" : request.requesterInitials;
+  const displayProviderName = hasProviderParticipation ? "Tu" : providerName;
+  const displayProviderInitials = hasProviderParticipation ? "TU" : providerInitials;
   const participantRole: "SOLICITANTE" | "PRESTADOR" | null = request.viewerRole === "SOLICITANTE" && isRequesterParticipant
     ? "SOLICITANTE"
     : request.viewerRole === "PRESTADOR" && hasProviderParticipation
@@ -195,6 +205,12 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
       isRequesterParticipant &&
       !submitting
   );
+  const chatAvailable = Boolean(
+    currentUser?.id &&
+      providerId &&
+      participantRole &&
+      (hasPendingCounterOffer || hasAcceptedPending || hasProposal)
+  );
   const bothConfirmed = requesterConfirmed && providerConfirmed;
   const canRate = Boolean(
     assignment?.id &&
@@ -208,6 +224,8 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
   );
   const ratingTargetName = confirmationRole === "PRESTADOR" ? request.requesterName : providerName;
   const ratingTargetLabel = confirmationRole === "PRESTADOR" ? "cliente" : "prestador";
+  const chatCounterpartName = participantRole === "SOLICITANTE" ? providerName : request.requesterName;
+  const chatCounterpartRole = participantRole === "SOLICITANTE" ? "prestador" : "solicitante";
 
   useEffect(() => {
     if (!assignment?.id || !confirmationRole || !currentUser?.id || typeof request.id !== "string" || !isCompleted) {
@@ -260,28 +278,68 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
     }
   };
 
+  const handleOpenProviderProfile = async () => {
+    if (!providerId || !onProviderPress) return;
+    setProfileLoading(true);
+    setError("");
+    try {
+      const provider = await servifyApi.getPublicProvider(providerId);
+      onProviderPress(provider);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo abrir el perfil del prestador");
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleKeepSearching = async () => {
+    if (typeof request.id !== "string") return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await servifyApi.retryDistribution(request.id);
+      await loadAssignmentState(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo buscar otro prestador");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleResolveCounterOffer = async (decision: "ACEPTAR" | "RECHAZAR") => {
     if (!currentUser?.id || !pendingCounterOffer?.id) return;
     setSubmitting(true);
     setError("");
 
     try {
-      const resolved = await servifyApi.resolveCounterOffer({
+      await servifyApi.resolveCounterOffer({
         contraofertaId: pendingCounterOffer.id,
         solicitanteId: currentUser.id,
         decision,
       });
-      const distribucionSolicitudId = resolved.distribucionSolicitudId ?? pendingCounterOffer.distribucionSolicitudId;
-      if (decision === "ACEPTAR" && distribucionSolicitudId) {
-        await servifyApi.confirmAssignment({
-          solicitudId: String(request.id),
-          distribucionSolicitudId,
-          solicitanteId: currentUser.id,
-        });
-      }
       await loadAssignmentState(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo resolver la contraoferta");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleKeepSearchingFromCounterOffer = async () => {
+    if (!currentUser?.id || !pendingCounterOffer?.id || typeof request.id !== "string") return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await servifyApi.resolveCounterOffer({
+        contraofertaId: pendingCounterOffer.id,
+        solicitanteId: currentUser.id,
+        decision: "RECHAZAR",
+      });
+      await servifyApi.retryDistribution(request.id);
+      await loadAssignmentState(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo seguir buscando prestadores");
     } finally {
       setSubmitting(false);
     }
@@ -371,10 +429,10 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
         <Card title="Solicitante">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#eff6ff", flexShrink: 0 }}>
-              <span style={{ fontWeight: 800, fontSize: 14, color: "#2563eb" }}>{request.requesterInitials}</span>
+              <span style={{ fontWeight: 800, fontSize: 14, color: "#2563eb" }}>{displayRequesterInitials}</span>
             </div>
             <div>
-              <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{request.requesterName}</p>
+              <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{displayRequesterName}</p>
               <p style={{ fontSize: 12, color: "#64748b" }}>Solicitante del servicio</p>
             </div>
           </div>
@@ -387,7 +445,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
                 <MessageSquare size={20} color="#ea580c" strokeWidth={2} />
               </div>
               <div className="flex-1">
-                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
+                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{displayProviderName}</p>
                 <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                   {participantRole === "SOLICITANTE"
                     ? "El prestador propuso nuevas condiciones para este pedido."
@@ -409,23 +467,33 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               <div className="grid grid-cols-2 gap-2 mt-3">
                 <button
                   type="button"
+                  onClick={handleOpenProviderProfile}
+                  disabled={profileLoading || !providerId}
+                  className="col-span-2 flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontWeight: 800, fontSize: 13, opacity: profileLoading ? 0.65 : 1 }}
+                >
+                  <UserRound size={15} strokeWidth={2} />
+                  {profileLoading ? "Abriendo..." : "Ver perfil publico"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKeepSearchingFromCounterOffer}
+                  disabled={!canResolveCounterOffer}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontWeight: 800, fontSize: 13, opacity: canResolveCounterOffer ? 1 : 0.65 }}
+                >
+                  <RefreshCw size={15} strokeWidth={2} />
+                  {submitting ? "Buscando..." : "Seguir buscando"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleResolveCounterOffer("ACEPTAR")}
                   disabled={!canResolveCounterOffer}
                   className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
                   style={{ background: "#16a34a", color: "white", fontWeight: 800, fontSize: 13, opacity: canResolveCounterOffer ? 1 : 0.65 }}
                 >
                   <CheckCircle size={15} strokeWidth={2} />
-                  {submitting ? "Procesando..." : "Aceptar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleResolveCounterOffer("RECHAZAR")}
-                  disabled={!canResolveCounterOffer}
-                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
-                  style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontWeight: 800, fontSize: 13, opacity: canResolveCounterOffer ? 1 : 0.65 }}
-                >
-                  <XCircle size={15} strokeWidth={2} />
-                  Rechazar
+                  {submitting ? "Procesando..." : "Aceptar precio"}
                 </button>
               </div>
             )}
@@ -436,10 +504,10 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
           <Card title={participantRole === "SOLICITANTE" ? "Prestador disponible" : "Aceptacion enviada"}>
             <div className="flex items-center gap-3 mb-3">
               <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#f0fdf4", flexShrink: 0 }}>
-                <span style={{ fontWeight: 800, fontSize: 14, color: "#16a34a" }}>{providerInitials}</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: "#16a34a" }}>{displayProviderInitials}</span>
               </div>
               <div className="flex-1">
-                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
+                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{displayProviderName}</p>
                 <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                   {participantRole === "SOLICITANTE"
                     ? "Acepto tu solicitud. Confirmalo para iniciar el servicio."
@@ -449,15 +517,37 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
             </div>
 
             {participantRole === "SOLICITANTE" && (
-              <button
-                type="button"
-                onClick={handleConfirmAssignment}
-                disabled={!canConfirmAssignment}
-                className="w-full py-3 rounded-xl mt-2 transition-all active:scale-95"
-                style={{ background: "#16a34a", color: "white", fontWeight: 800, fontSize: 14, opacity: canConfirmAssignment ? 1 : 0.65 }}
-              >
-                {submitting ? "Confirmando..." : "Confirmar prestador"}
-              </button>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={handleOpenProviderProfile}
+                  disabled={profileLoading || !providerId}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontWeight: 800, fontSize: 13, opacity: profileLoading ? 0.65 : 1 }}
+                >
+                  <UserRound size={15} strokeWidth={2} />
+                  Perfil
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKeepSearching}
+                  disabled={submitting}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontWeight: 800, fontSize: 13, opacity: submitting ? 0.65 : 1 }}
+                >
+                  <RefreshCw size={15} strokeWidth={2} />
+                  Seguir buscando
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAssignment}
+                  disabled={!canConfirmAssignment}
+                  className="col-span-2 py-3 rounded-xl transition-all active:scale-95"
+                  style={{ background: "#16a34a", color: "white", fontWeight: 800, fontSize: 14, opacity: canConfirmAssignment ? 1 : 0.65 }}
+                >
+                  {submitting ? "Confirmando..." : "Confirmar prestador"}
+                </button>
+              </div>
             )}
           </Card>
         )}
@@ -466,10 +556,10 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
           <Card title="Propuesta aceptada">
             <div className="flex items-center gap-3 mb-3">
               <div className="flex items-center justify-center rounded-full" style={{ width: 44, height: 44, background: "#f0fdf4", flexShrink: 0 }}>
-                <span style={{ fontWeight: 800, fontSize: 14, color: "#16a34a" }}>{providerInitials}</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: "#16a34a" }}>{displayProviderInitials}</span>
               </div>
               <div className="flex-1">
-                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{providerName}</p>
+                <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{displayProviderName}</p>
               </div>
               <div className="px-3 py-1.5 rounded-xl" style={{ background: "#eff6ff" }}>
                 <span style={{ fontSize: 14, fontWeight: 800, color: "#2563eb" }}>{acceptedPrice}</span>
@@ -479,6 +569,33 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
             <div className="servify-form-surface p-3 rounded-xl" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
               <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{proposalMessage}</p>
             </div>
+            {providerId && onProviderPress ? (
+              <button
+                type="button"
+                onClick={handleOpenProviderProfile}
+                disabled={profileLoading}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 py-3 rounded-xl transition-all active:scale-95"
+                style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontWeight: 800, fontSize: 13, opacity: profileLoading ? 0.65 : 1 }}
+              >
+                <UserRound size={15} strokeWidth={2} />
+                {profileLoading ? "Abriendo..." : "Ver perfil publico"}
+              </button>
+            ) : null}
+          </Card>
+        )}
+
+        {chatAvailable && currentUser?.id && (
+          <Card title="Chat">
+            <button
+              type="button"
+              onClick={() => setShowChat(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 transition-all active:scale-95"
+              style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 14, fontWeight: 900 }}
+            >
+              <MessageSquare size={17} strokeWidth={2.2} />
+              Abrir chat con {chatCounterpartRole}
+              <Maximize2 size={15} strokeWidth={2.1} />
+            </button>
           </Card>
         )}
 
@@ -488,8 +605,8 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
               <div className="flex items-center justify-between gap-3">
                 <ConfirmationPill
                   label="Solicitante"
-                  name={request.requesterName}
-                  initials={request.requesterInitials}
+                  name={displayRequesterName}
+                  initials={displayRequesterInitials}
                   confirmed={requesterConfirmed}
                 />
                 <div
@@ -500,8 +617,8 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
                 </div>
                 <ConfirmationPill
                   label="Prestador"
-                  name={providerName}
-                  initials={providerInitials}
+                  name={displayProviderName}
+                  initials={displayProviderInitials}
                   confirmed={providerConfirmed}
                 />
               </div>
@@ -597,7 +714,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
                       prestadorId: assignment?.prestadorId ?? "",
                       calificadorId: currentUser?.id ?? "",
                       rolCalificador: confirmationRole as "SOLICITANTE" | "PRESTADOR",
-                      onSubmitted: (puntaje) => {
+                      onSubmitted: (puntaje, comentario) => {
                         setExistingRating({
                           solicitudId: String(request.id),
                           asignacionServicioId: assignment?.id ?? "",
@@ -607,6 +724,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
                             : assignment?.prestadorId,
                           rolCalificador: confirmationRole as "SOLICITANTE" | "PRESTADOR",
                           puntaje,
+                          comentario,
                           fechaCalificacion: new Date().toISOString(),
                         });
                       },
@@ -622,12 +740,166 @@ export function RequestDetail({ request, onBack, onRate, currentUser }: RequestD
                 </button>
               )}
               <div className="w-full flex flex-col gap-2 pt-1">
-                <ConfirmRow label={request.requesterName} initials={request.requesterInitials} confirmed={requesterConfirmed} />
-                <ConfirmRow label={providerName} initials={providerInitials} confirmed={providerConfirmed} />
+                <ConfirmRow label={displayRequesterName} initials={displayRequesterInitials} confirmed={requesterConfirmed} />
+                <ConfirmRow label={displayProviderName} initials={displayProviderInitials} confirmed={providerConfirmed} />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+      {showChat && chatAvailable && currentUser?.id ? (
+        <ServiceChat
+          solicitudId={String(request.id)}
+          prestadorId={providerId}
+          currentUserId={currentUser.id}
+          counterpartName={chatCounterpartName}
+          onClose={() => setShowChat(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ServiceChat({
+  solicitudId,
+  prestadorId,
+  currentUserId,
+  counterpartName,
+  onClose,
+}: {
+  solicitudId: string;
+  prestadorId: string;
+  currentUserId: string;
+  counterpartName: string;
+  onClose: () => void;
+}) {
+  const [messages, setMessages] = useState<ApiChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadMessages = useCallback(
+    async (silent = false) => {
+      if (!solicitudId || !prestadorId) return;
+      if (!silent) setLoading(true);
+      setError("");
+      try {
+        const next = await servifyApi.listChatMessages(solicitudId, prestadorId);
+        setMessages(next);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo cargar el chat");
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [prestadorId, solicitudId]
+  );
+
+  useEffect(() => {
+    void loadMessages();
+    const intervalId = window.setInterval(() => {
+      void loadMessages(true);
+    }, 2500);
+    return () => window.clearInterval(intervalId);
+  }, [loadMessages]);
+
+  const sendMessage = async () => {
+    const content = draft.trim();
+    if (!content || sending) return;
+    setSending(true);
+    setError("");
+    try {
+      const sent = await servifyApi.sendChatMessage({ solicitudId, prestadorId, contenido: content });
+      setMessages((current) => [...current, sent]);
+      setDraft("");
+      void loadMessages(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo enviar el mensaje");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+      <div className="servify-page-header flex items-center justify-between bg-white px-5 pb-4 pt-12" style={{ borderBottom: "1px solid #e2e8f0" }}>
+        <div className="min-w-0">
+          <p style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Chat</p>
+          <h2 style={{ color: "#0f172a", fontSize: 19, fontWeight: 900, lineHeight: 1.15 }}>
+            {counterpartName}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center justify-center rounded-xl"
+          style={{ width: 40, height: 40, background: "#f1f5f9", color: "#64748b" }}
+        >
+          <X size={19} strokeWidth={2.2} />
+        </button>
+      </div>
+
+      <div className="servify-form-surface flex min-h-0 flex-1 flex-col p-4" style={{ background: "#f8fafc" }}>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+          {loading ? (
+            <p style={{ color: "#64748b", fontSize: 13, fontWeight: 700 }}>Cargando mensajes...</p>
+          ) : null}
+          {!loading && messages.length === 0 ? (
+            <p style={{ color: "#64748b", fontSize: 13, fontWeight: 700 }}>Todavia no hay mensajes.</p>
+          ) : null}
+          {messages.map((message) => {
+            const own = message.remitenteId === currentUserId;
+            return (
+              <div
+                key={message.id}
+                className={`flex ${own ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className="rounded-2xl px-3 py-2"
+                  style={{
+                    maxWidth: "82%",
+                    background: own ? "#2563eb" : "#ffffff",
+                    color: own ? "white" : "#0f172a",
+                    border: own ? "1px solid #2563eb" : "1px solid #e2e8f0",
+                  }}
+                >
+                  <p style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>{message.contenido}</p>
+                  <p style={{ fontSize: 10, fontWeight: 800, opacity: 0.7, marginTop: 4 }}>
+                    {formatChatDate(message.fechaEnvio)}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {error ? (
+          <p className="mt-2 rounded-xl px-3 py-2" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 12, fontWeight: 800 }}>
+            {error}
+          </p>
+        ) : null}
+
+        <div className="mt-3 flex items-end gap-2">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={2}
+            maxLength={1200}
+            placeholder="Escribi un mensaje..."
+            className="min-w-0 flex-1 resize-none rounded-2xl px-3 py-2 outline-none"
+            style={{ border: "1px solid #dbeafe", color: "#0f172a", fontSize: 13 }}
+          />
+          <button
+            type="button"
+            onClick={sendMessage}
+            disabled={!draft.trim() || sending}
+            className="flex items-center justify-center rounded-2xl transition-all active:scale-95"
+            style={{ width: 44, height: 44, background: draft.trim() && !sending ? "#2563eb" : "#cbd5e1", color: "white" }}
+          >
+            <Send size={17} strokeWidth={2.2} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -734,6 +1006,13 @@ function ConfirmationPill({
       </div>
     </div>
   );
+}
+
+function formatChatDate(value?: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function isServiceClosed(state: AssignmentState): boolean {

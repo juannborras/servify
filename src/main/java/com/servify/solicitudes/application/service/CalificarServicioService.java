@@ -21,15 +21,31 @@ public class CalificarServicioService implements CalificarServicioUseCase {
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
     private final AsignacionServicioRepositoryPort asignacionServicioRepositoryPort;
     private final PoliticaCalificacion politicaCalificacion;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public CalificarServicioService(CalificacionRepositoryPort calificacionRepositoryPort,
                                     SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
                                     AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
                                     PoliticaCalificacion politicaCalificacion) {
+        this(
+                calificacionRepositoryPort,
+                solicitudServicioRepositoryPort,
+                asignacionServicioRepositoryPort,
+                politicaCalificacion,
+                null
+        );
+    }
+
+    public CalificarServicioService(CalificacionRepositoryPort calificacionRepositoryPort,
+                                    SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                    AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+                                    PoliticaCalificacion politicaCalificacion,
+                                    NotificadorEventosSolicitudService notificadorEventosSolicitudService) {
         this.calificacionRepositoryPort = calificacionRepositoryPort;
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
         this.asignacionServicioRepositoryPort = asignacionServicioRepositoryPort;
         this.politicaCalificacion = politicaCalificacion;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -69,6 +85,7 @@ public class CalificarServicioService implements CalificarServicioUseCase {
                 obtenerFechaActual()
         );
         persistirCalificacion(calificacion);
+        notificarCalificacion(calificacion, solicitudServicio);
     }
 
     protected SolicitudServicio obtenerSolicitudExistente(UUID solicitudId) {
@@ -168,6 +185,7 @@ public class CalificarServicioService implements CalificarServicioUseCase {
                 calificadoId,
                 rol,
                 command.getPuntaje(),
+                command.getComentario(),
                 fechaCalificacion
         );
     }
@@ -182,5 +200,15 @@ public class CalificarServicioService implements CalificarServicioUseCase {
 
     protected LocalDateTime obtenerFechaActual() {
         return LocalDateTime.now();
+    }
+
+    protected void notificarCalificacion(Calificacion calificacion, SolicitudServicio solicitudServicio) {
+        if (notificadorEventosSolicitudService != null) {
+            notificadorEventosSolicitudService.calificacionRecibida(
+                    calificacion.getCalificadoId(),
+                    solicitudServicio,
+                    calificacion.getAsignacionServicioId()
+            );
+        }
     }
 }

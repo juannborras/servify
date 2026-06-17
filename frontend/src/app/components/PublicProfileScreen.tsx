@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, Briefcase, MapPin, Menu, Star, UserRound } from "lucide-react";
+import { ArrowLeft, Briefcase, Eye, MapPin, Menu, Star, UserRound, X } from "lucide-react";
 import {
   formatMoney,
   fromApiModality,
@@ -27,6 +27,8 @@ const emptyRating = (usuarioId: string): ApiRatingSummary => ({
 export function PublicProfileScreen({ user, provider, ownProfile = false, onBack, onOpenSettings }: PublicProfileScreenProps) {
   const [ownProvider, setOwnProvider] = useState<ApiPublicProvider | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showServices, setShowServices] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
 
   useEffect(() => {
     if (!ownProfile || !user) return;
@@ -39,11 +41,19 @@ export function PublicProfileScreen({ user, provider, ownProfile = false, onBack
       servifyApi.getUserProfile(user.id).catch(() => null),
       servifyApi.listUserPublications(user.id).catch(() => []),
       servifyApi.getUserRatingSummary(user.id).catch(() => emptyRating(user.id)),
+      servifyApi.getPublicProvider(user.id).catch(() => null),
     ])
-      .then(([account, profile, publications, rating]) => {
+      .then(([account, profile, publications, rating, publicProvider]) => {
         if (cancelled) return;
+        if (publicProvider) {
+          setOwnProvider({
+            ...publicProvider,
+            fotoPerfilUrl: servifyApi.getStoredProfilePhoto(user.id) || publicProvider.fotoPerfilUrl,
+          });
+          return;
+        }
         const activePublications = publications.filter((publication) => (publication.estado ?? "").toUpperCase() === "ACTIVA");
-        const publicProvider: ApiPublicProvider = {
+        const fallbackProvider: ApiPublicProvider = {
           usuarioId: user.id,
           nombreUsuario: account?.usuario.nombreUsuario ?? user.username ?? "",
           nombre: profile?.nombre ?? user.name.split(" ")[0],
@@ -74,8 +84,9 @@ export function PublicProfileScreen({ user, provider, ownProfile = false, onBack
           })),
           cantidadValoraciones: rating.cantidadValoraciones,
           promedioEstrellas: rating.promedioEstrellas,
+          resenasDestacadas: [],
         };
-        setOwnProvider(publicProvider);
+        setOwnProvider(fallbackProvider);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -89,6 +100,15 @@ export function PublicProfileScreen({ user, provider, ownProfile = false, onBack
   const profile = ownProfile ? ownProvider : provider;
   const displayName = formatProviderName(profile) || (ownProfile ? user?.name : "") || (profile?.nombreUsuario ? `@${profile.nombreUsuario}` : "Perfil publico");
   const publications = useMemo(() => profile?.publicacionesActivas ?? [], [profile]);
+  const reviews = useMemo(
+    () => (profile?.resenasDestacadas ?? []).filter((review) => review.comentario?.trim()),
+    [profile]
+  );
+
+  useEffect(() => {
+    setShowServices(false);
+    setShowAllReviews(false);
+  }, [profile?.usuarioId]);
 
   if (!profile && loading) {
     return (
@@ -165,22 +185,48 @@ export function PublicProfileScreen({ user, provider, ownProfile = false, onBack
           </InfoBlock>
         ) : null}
 
+        {profile.resenasDestacadas?.length ? (
+          <ReviewsPreview
+            reviews={reviews}
+            ratingLabel={ratingText(profile)}
+            onOpenAll={() => setShowAllReviews(true)}
+          />
+        ) : null}
+
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 style={{ color: "#0f172a", fontSize: 16, fontWeight: 900 }}>Publicaciones activas</h2>
-            <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 800 }}>{publications.length}</span>
+            <h2 style={{ color: "#0f172a", fontSize: 16, fontWeight: 900 }}>Servicios activos</h2>
+            <button
+              type="button"
+              onClick={() => setShowServices((value) => !value)}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-2 transition-all active:scale-95"
+              style={{ background: "#eff6ff", color: "#2563eb", fontSize: 12, fontWeight: 900 }}
+            >
+              <Eye size={14} strokeWidth={2} />
+              {showServices ? "Ocultar" : "Ver servicios activos"}
+            </button>
           </div>
-          <div className="flex flex-col gap-3">
-            {publications.length === 0 ? (
-              <p className="rounded-2xl px-4 py-3" style={{ background: "white", color: "#64748b", fontSize: 13, fontWeight: 700 }}>
-                Todavia no hay publicaciones activas.
-              </p>
-            ) : (
-              publications.map((publication) => <PublicationCard key={publication.id} publication={publication} />)
-            )}
-          </div>
+          {showServices ? (
+            <div className="flex flex-col gap-3">
+              {publications.length === 0 ? (
+                <p className="rounded-2xl px-4 py-3" style={{ background: "white", color: "#64748b", fontSize: 13, fontWeight: 700 }}>
+                  Todavia no hay servicios activos.
+                </p>
+              ) : (
+                publications.map((publication) => <PublicationCard key={publication.id} publication={publication} />)
+              )}
+            </div>
+          ) : (
+            <p className="rounded-2xl px-4 py-3" style={{ background: "white", color: "#64748b", fontSize: 13, fontWeight: 700 }}>
+              {publications.length} servicio{publications.length === 1 ? "" : "s"} disponible{publications.length === 1 ? "" : "s"}.
+            </p>
+          )}
         </div>
       </div>
+
+      {showAllReviews ? (
+        <ReviewsModal reviews={reviews} onClose={() => setShowAllReviews(false)} />
+      ) : null}
     </div>
   );
 }
@@ -237,6 +283,125 @@ function PublicationCard({ publication }: { publication: ApiPublicProviderPublic
   );
 }
 
+function ReviewsPreview({
+  reviews,
+  ratingLabel,
+  onOpenAll,
+}: {
+  reviews: NonNullable<ApiPublicProvider["resenasDestacadas"]>;
+  ratingLabel: string;
+  onOpenAll: () => void;
+}) {
+  const highlighted = reviews.slice(0, 2);
+
+  return (
+    <InfoBlock title="Valoraciones">
+      <button
+        type="button"
+        onClick={onOpenAll}
+        className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left transition-all active:scale-[0.99]"
+        style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
+      >
+        <div className="flex items-center gap-2">
+          <Star size={18} color="#f59e0b" fill="#f59e0b" strokeWidth={1.8} />
+          <div>
+            <p style={{ color: "#92400e", fontSize: 14, fontWeight: 900 }}>{ratingLabel}</p>
+            <p style={{ color: "#b45309", fontSize: 12, fontWeight: 700 }}>Toca para ver comentarios</p>
+          </div>
+        </div>
+        <span style={{ color: "#d97706", fontSize: 12, fontWeight: 900 }}>Ver todas</span>
+      </button>
+
+      <div className="mt-3 flex flex-col gap-2">
+        {highlighted.map((review, index) => (
+          <ReviewBubble key={`${review.fechaCalificacion ?? "review"}-${index}`} review={review} />
+        ))}
+      </div>
+    </InfoBlock>
+  );
+}
+
+function ReviewsModal({
+  reviews,
+  onClose,
+}: {
+  reviews: NonNullable<ApiPublicProvider["resenasDestacadas"]>;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" style={{ background: "rgba(15,23,42,0.38)" }} onClick={onClose}>
+      <div
+        className="servify-sheet w-full rounded-t-3xl bg-white"
+        style={{ maxHeight: "82vh", overflow: "hidden" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 pb-3 pt-5">
+          <div>
+            <p style={{ color: "#0f172a", fontSize: 18, fontWeight: 900 }}>Calificaciones</p>
+            <p style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>{reviews.length} comentario{reviews.length === 1 ? "" : "s"}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center justify-center rounded-xl"
+            style={{ width: 36, height: 36, background: "#f1f5f9", color: "#64748b" }}
+          >
+            <X size={18} strokeWidth={2.2} />
+          </button>
+        </div>
+        <div className="flex max-h-[68vh] flex-col gap-3 overflow-y-auto px-5 pb-6">
+          {reviews.length === 0 ? (
+            <p className="rounded-2xl px-4 py-3" style={{ background: "#f8fafc", color: "#64748b", fontSize: 13, fontWeight: 800 }}>
+              Todavia no hay comentarios publicos.
+            </p>
+          ) : (
+            reviews.map((review, index) => <ReviewCard key={`${review.fechaCalificacion ?? "review"}-${index}`} review={review} />)
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewBubble({ review }: { review: NonNullable<ApiPublicProvider["resenasDestacadas"]>[number] }) {
+  return (
+    <div className="rounded-2xl px-3 py-2.5" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+      <div className="flex items-center gap-1.5">
+        <Star size={13} color="#f59e0b" fill="#f59e0b" strokeWidth={1.7} />
+        <span style={{ color: "#92400e", fontSize: 12, fontWeight: 900 }}>{review.puntaje}/5</span>
+        <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 800 }}>{formatReviewDate(review.fechaCalificacion)}</span>
+      </div>
+      <p style={{ color: "#475569", fontSize: 13, lineHeight: 1.4, marginTop: 6 }}>
+        {truncate(review.comentario ?? "", 92)}
+      </p>
+    </div>
+  );
+}
+
+function ReviewCard({ review }: { review: NonNullable<ApiPublicProvider["resenasDestacadas"]>[number] }) {
+  return (
+    <div className="rounded-2xl px-3 py-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <Star
+              key={value}
+              size={14}
+              color={value <= review.puntaje ? "#f59e0b" : "#cbd5e1"}
+              fill={value <= review.puntaje ? "#f59e0b" : "none"}
+              strokeWidth={1.7}
+            />
+          ))}
+        </div>
+        <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 800 }}>{formatReviewDate(review.fechaCalificacion)}</span>
+      </div>
+      <p style={{ color: "#475569", fontSize: 13, lineHeight: 1.45, marginTop: 7 }}>
+        {review.comentario}
+      </p>
+    </div>
+  );
+}
+
 function formatProviderName(provider?: ApiPublicProvider | null): string {
   if (!provider) return "";
   return [provider.nombre, provider.apellido].filter(Boolean).join(" ").trim();
@@ -256,4 +421,17 @@ function ratingText(provider: ApiPublicProvider): string {
 
 function uniqueValues(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function formatReviewDate(value?: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+}
+
+function truncate(value: string, maxLength: number): string {
+  const clean = value.trim();
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, maxLength - 3)}...`;
 }

@@ -19,13 +19,22 @@ public class ResolverContraofertaService implements ResolverContraofertaUseCase 
     private final ContraofertaRepositoryPort contraofertaRepositoryPort;
     private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public ResolverContraofertaService(ContraofertaRepositoryPort contraofertaRepositoryPort,
                                        DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
                                        SolicitudServicioRepositoryPort solicitudServicioRepositoryPort) {
+        this(contraofertaRepositoryPort, distribucionSolicitudRepositoryPort, solicitudServicioRepositoryPort, null);
+    }
+
+    public ResolverContraofertaService(ContraofertaRepositoryPort contraofertaRepositoryPort,
+                                       DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+                                       SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                       NotificadorEventosSolicitudService notificadorEventosSolicitudService) {
         this.contraofertaRepositoryPort = contraofertaRepositoryPort;
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -62,6 +71,7 @@ public class ResolverContraofertaService implements ResolverContraofertaUseCase 
         this.contraofertaRepositoryPort.guardar(contraoferta);
         // persistir distribucion si cambió su estado
         this.distribucionSolicitudRepositoryPort.guardar(distribucion);
+        notificarResolucion(solicitud, contraoferta, command.getDecision());
 
         return construirResultado(contraoferta);
     }
@@ -142,5 +152,15 @@ public class ResolverContraofertaService implements ResolverContraofertaUseCase 
 
     protected LocalDateTime obtenerFechaActual() {
         return LocalDateTime.now();
+    }
+
+    protected void notificarResolucion(
+            SolicitudServicio solicitud,
+            Contraoferta contraoferta,
+            TipoDecisionSolicitud decision
+    ) {
+        if (notificadorEventosSolicitudService != null) {
+            notificadorEventosSolicitudService.contraofertaResuelta(solicitud, contraoferta, decision);
+        }
     }
 }

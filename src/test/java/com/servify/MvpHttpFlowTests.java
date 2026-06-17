@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -213,7 +214,8 @@ class MvpHttpFlowTests {
                   "prestadorId": "%s",
                   "calificadorId": "%s",
                   "rolCalificador": "SOLICITANTE",
-                  "puntaje": 5
+                  "puntaje": 5,
+                  "comentario": "Excelente servicio, muy prolijo"
                 }
                 """.formatted(asignacionId, solicitanteId, prestadorId, solicitanteId)))
                 .andExpect(status().isCreated());
@@ -225,6 +227,7 @@ class MvpHttpFlowTests {
         ));
         assertEquals(5, calificacionSolicitante.get("puntaje").asInt());
         assertEquals("SOLICITANTE", calificacionSolicitante.get("rolCalificador").asText());
+        assertEquals("Excelente servicio, muy prolijo", calificacionSolicitante.get("comentario").asText());
 
         mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/calificaciones", """
                 {
@@ -241,6 +244,9 @@ class MvpHttpFlowTests {
         JsonNode reputacionPrestador = responseJson(getPath("/api/v1/usuarios/" + prestadorId + "/reputacion"));
         assertEquals(1, reputacionPrestador.get("cantidadValoraciones").asInt());
         assertEquals(5.0, reputacionPrestador.get("promedioEstrellas").asDouble());
+        JsonNode prestadorPublico = responseJson(getPath("/api/v1/prestadores/" + prestadorId));
+        assertEquals(1, prestadorPublico.get("resenasDestacadas").size());
+        assertEquals("Excelente servicio, muy prolijo", prestadorPublico.get("resenasDestacadas").get(0).get("comentario").asText());
 
         JsonNode reputacionSolicitante = responseJson(getPath("/api/v1/usuarios/" + solicitanteId + "/reputacion"));
         assertEquals(1, reputacionSolicitante.get("cantidadValoraciones").asInt());
@@ -375,6 +381,144 @@ class MvpHttpFlowTests {
                 .getResponse()
                 .getContentAsString());
         assertEquals("Ese nombre de usuario ya esta en uso", usuarioDuplicado.get("message").asText());
+    }
+
+    @Test
+    void recuperacionPasswordPorEmailPermiteRestablecerYLoginConNuevaPassword() throws Exception {
+        UUID usuarioId = idFrom(postCreatedPath("/api/v1/usuarios", """
+                {
+                  "email": "reset-http@servify.test",
+                  "nombreUsuario": "reset.http",
+                  "telefono": "4444",
+                  "rol": "USUARIO"
+                }
+                """));
+
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "reset-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """.formatted(usuarioId)))
+                .andExpect(status().isCreated());
+
+        JsonNode solicitud = responseJson(postPath("/api/v1/auth/password-reset", """
+                {
+                  "email": "reset-http@servify.test"
+                }
+                """));
+        assertEquals(
+                "Si existe una cuenta asociada a ese email, enviaremos instrucciones para recuperar la contrasena.",
+                solicitud.get("mensaje").asText()
+        );
+        assertTrue(solicitud.hasNonNull("debugToken"));
+
+        mockMvc.perform(postJson("/api/v1/auth/password-reset/confirm", """
+                {
+                  "token": "%s",
+                  "nuevaPassword": "NuevaPassw0rd!"
+                }
+                """.formatted(solicitud.get("debugToken").asText())))
+                .andExpect(status().isNoContent());
+
+        JsonNode sesionNueva = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "reset-http@servify.test",
+                  "passwordPlano": "NuevaPassw0rd!"
+                }
+                """));
+        assertEquals(usuarioId.toString(), sesionNueva.get("usuarioId").asText());
+
+        JsonNode passwordAnterior = responseJson(mockMvc.perform(postJson("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "reset-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """))
+                .andExpect(status().isBadRequest())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals("Contrasena incorrecta", passwordAnterior.get("message").asText());
+    }
+
+    @Test
+    void moderacionGeneraNotificacionYUsuarioPuedeMarcarlaLeida() throws Exception {
+        UUID prestadorId = crearUsuarioConNombreUsuario("notif-owner-http@servify.test", "notif.owner");
+        completarPerfilPalermo(prestadorId);
+        UUID categoriaId = crearCategoriaActiva("Notificaciones HTTP");
+        UUID publicacionId = idFrom(postCreatedPath("/api/v1/publicaciones", publicacionJson(
+                prestadorId,
+                categoriaId,
+                "Publicacion con aviso HTTP",
+                "Palermo",
+                -34.5889,
+                -58.4306,
+                12000
+        )));
+
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "notif-owner-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """.formatted(prestadorId)))
+                .andExpect(status().isCreated());
+
+        JsonNode sesionPrestador = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "notif.owner",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """));
+        String prestadorToken = sesionPrestador.get("accessToken").get("token").asText();
+        String adminToken = crearAdminYLogin("admin-notif-http@servify.test", "admin.notif");
+
+        mockMvc.perform(patch("/api/v1/admin/publicaciones/" + publicacionId + "/moderacion")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "estadoDestino": "BLOQUEADA",
+                                  "motivo": "Contenido inseguro"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        JsonNode notificaciones = responseJson(getPathAuth(
+                "/api/v1/usuarios/" + prestadorId + "/notificaciones",
+                prestadorToken
+        ));
+        assertTrue(notificaciones.isArray());
+        assertEquals(1, notificaciones.size());
+        JsonNode notificacion = notificaciones.get(0);
+        assertEquals("MODERACION_PUBLICACION", notificacion.get("tipo").asText());
+        assertEquals("PUBLICACION", notificacion.get("referenciaTipo").asText());
+        assertEquals(publicacionId.toString(), notificacion.get("referenciaId").asText());
+        assertEquals(false, notificacion.get("leida").asBoolean());
+
+        JsonNode leida = responseJson(mockMvc.perform(patch(
+                        "/api/v1/usuarios/" + prestadorId + "/notificaciones/" + notificacion.get("id").asText() + "/lectura")
+                        .header("Authorization", "Bearer " + prestadorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals(true, leida.get("leida").asBoolean());
+        assertTrue(leida.hasNonNull("fechaLectura"));
+
+        mockMvc.perform(delete("/api/v1/usuarios/" + prestadorId + "/notificaciones/" + notificacion.get("id").asText())
+                        .header("Authorization", "Bearer " + prestadorToken))
+                .andExpect(status().isNoContent());
+
+        JsonNode sinNotificaciones = responseJson(getPathAuth(
+                "/api/v1/usuarios/" + prestadorId + "/notificaciones",
+                prestadorToken
+        ));
+        assertTrue(sinNotificaciones.isArray());
+        assertEquals(0, sinNotificaciones.size());
     }
 
     @Test
@@ -1031,6 +1175,34 @@ class MvpHttpFlowTests {
     void contraofertaPendienteSeExponeYPuedeResolversePorHttp() throws Exception {
         UUID solicitanteId = crearUsuario("cliente-contraoferta-http@servify.test");
         UUID prestadorId = crearUsuario("prestador-contraoferta-http@servify.test");
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "cliente-contraoferta-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """.formatted(solicitanteId)))
+                .andExpect(status().isCreated());
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "prestador-contraoferta-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """.formatted(prestadorId)))
+                .andExpect(status().isCreated());
+        String solicitanteToken = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "cliente-contraoferta-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """)).get("accessToken").get("token").asText();
+        String prestadorToken = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "prestador-contraoferta-http@servify.test",
+                  "passwordPlano": "Passw0rd!"
+                }
+                """)).get("accessToken").get("token").asText();
         completarPerfilPalermo(prestadorId);
         UUID categoriaId = crearCategoriaActiva("Contraofertas HTTP");
         UUID publicacionId = crearPublicacionActiva(prestadorId, categoriaId, "Clase con contraoferta HTTP", "Palermo", 15000);
@@ -1063,6 +1235,10 @@ class MvpHttpFlowTests {
 
         JsonNode recibidas = responseJson(getPath("/api/v1/prestadores/" + prestadorId + "/solicitudes-recibidas"));
         UUID distribucionId = UUID.fromString(recibidas.get(0).get("distribucionSolicitudId").asText());
+        assertNotificationTypeExists(
+                responseJson(getPathAuth("/api/v1/usuarios/" + prestadorId + "/notificaciones", prestadorToken)),
+                "SOLICITUD_COMPATIBLE"
+        );
 
         mockMvc.perform(postJson("/api/v1/distribuciones/" + distribucionId + "/contraofertas", """
                 {
@@ -1077,6 +1253,12 @@ class MvpHttpFlowTests {
         assertEquals(1, estadoContraoferta.get("contraofertasPendientes").size());
         UUID contraofertaId = UUID.fromString(estadoContraoferta.get("contraofertasPendientes").get(0).get("id").asText());
         assertEquals(distribucionId.toString(), estadoContraoferta.get("contraofertasPendientes").get(0).get("distribucionSolicitudId").asText());
+        assertNotificationReferenceExists(
+                responseJson(getPathAuth("/api/v1/usuarios/" + solicitanteId + "/notificaciones", solicitanteToken)),
+                "CONTRAOFERTA_RECIBIDA",
+                "SOLICITUD",
+                solicitudId.toString()
+        );
 
         JsonNode resuelta = responseJson(postPath("/api/v1/contraofertas/" + contraofertaId + "/resoluciones", """
                 {
@@ -1089,6 +1271,45 @@ class MvpHttpFlowTests {
         JsonNode estadoAceptado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
         assertEquals(1, estadoAceptado.get("distribucionesAceptadas").size());
         assertEquals(publicacionId.toString(), estadoAceptado.get("distribucionesAceptadas").get(0).get("publicacionServicioId").asText());
+
+        JsonNode mensajeChat = responseJson(mockMvc.perform(post("/api/v1/solicitudes/" + solicitudId + "/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                {
+                  "prestadorId": "%s",
+                  "contenido": "Hola, me interesa avanzar con esta propuesta"
+                }
+                """.formatted(prestadorId))
+                        .header("Authorization", "Bearer " + solicitanteToken))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals(solicitudId.toString(), mensajeChat.get("solicitudId").asText());
+        assertEquals(solicitanteId.toString(), mensajeChat.get("remitenteId").asText());
+
+        JsonNode chatPrestador = responseJson(mockMvc.perform(get("/api/v1/solicitudes/" + solicitudId + "/chat")
+                        .param("prestadorId", prestadorId.toString())
+                        .header("Authorization", "Bearer " + prestadorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals(1, chatPrestador.size());
+        assertEquals("Hola, me interesa avanzar con esta propuesta", chatPrestador.get(0).get("contenido").asText());
+
+        assertNotificationReferenceExists(
+                responseJson(getPathAuth("/api/v1/usuarios/" + prestadorId + "/notificaciones", prestadorToken)),
+                "CONTRAOFERTA_RESUELTA",
+                "SOLICITUD",
+                solicitudId.toString()
+        );
+        assertNotificationReferenceExists(
+                responseJson(getPathAuth("/api/v1/usuarios/" + prestadorId + "/notificaciones", prestadorToken)),
+                "MENSAJE_CHAT",
+                "SOLICITUD",
+                solicitudId.toString()
+        );
     }
 
     @Test
@@ -1324,6 +1545,28 @@ class MvpHttpFlowTests {
 
     private JsonNode responseJson(String json) throws Exception {
         return objectMapper.readTree(json);
+    }
+
+    private void assertNotificationTypeExists(JsonNode notifications, String type) {
+        assertTrue(notifications.isArray());
+        for (JsonNode notification : notifications) {
+            if (type.equals(notification.get("tipo").asText())) {
+                return;
+            }
+        }
+        fail("No se encontro notificacion de tipo " + type + " en " + notifications);
+    }
+
+    private void assertNotificationReferenceExists(JsonNode notifications, String type, String referenceType, String referenceId) {
+        assertTrue(notifications.isArray());
+        for (JsonNode notification : notifications) {
+            if (type.equals(notification.get("tipo").asText())
+                    && referenceType.equals(notification.get("referenciaTipo").asText())
+                    && referenceId.equals(notification.get("referenciaId").asText())) {
+                return;
+            }
+        }
+        fail("No se encontro notificacion " + type + " con referencia " + referenceType + "/" + referenceId + " en " + notifications);
     }
 
     private String getPath(String path) throws Exception {

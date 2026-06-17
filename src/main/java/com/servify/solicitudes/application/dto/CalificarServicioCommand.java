@@ -24,6 +24,7 @@ public class CalificarServicioCommand {
     private UUID calificadorId;
     private RolConfirmante rolCalificador;
     private Integer puntaje;
+    private String comentario;
 
     public CalificarServicioCommand() {
     }
@@ -33,7 +34,7 @@ public class CalificarServicioCommand {
                                     UUID solicitanteId,
                                     UUID prestadorId,
                                     Integer puntaje) {
-        this(solicitudId, asignacionServicioId, solicitanteId, prestadorId, puntaje, solicitanteId, RolConfirmante.SOLICITANTE);
+        this(solicitudId, asignacionServicioId, solicitanteId, prestadorId, puntaje, solicitanteId, RolConfirmante.SOLICITANTE, null);
     }
 
     public CalificarServicioCommand(UUID solicitudId,
@@ -43,6 +44,17 @@ public class CalificarServicioCommand {
                                     Integer puntaje,
                                     UUID calificadorId,
                                     RolConfirmante rolCalificador) {
+        this(solicitudId, asignacionServicioId, solicitanteId, prestadorId, puntaje, calificadorId, rolCalificador, null);
+    }
+
+    public CalificarServicioCommand(UUID solicitudId,
+                                    UUID asignacionServicioId,
+                                    UUID solicitanteId,
+                                    UUID prestadorId,
+                                    Integer puntaje,
+                                    UUID calificadorId,
+                                    RolConfirmante rolCalificador,
+                                    String comentario) {
         this.solicitudId = solicitudId;
         this.asignacionServicioId = asignacionServicioId;
         this.solicitanteId = solicitanteId;
@@ -50,6 +62,7 @@ public class CalificarServicioCommand {
         this.puntaje = puntaje;
         this.calificadorId = calificadorId;
         this.rolCalificador = rolCalificador;
+        this.comentario = comentario;
     }
 
     public UUID getSolicitudId() {
@@ -78,6 +91,10 @@ public class CalificarServicioCommand {
 
     public Integer getPuntaje() {
         return puntaje;
+    }
+
+    public String getComentario() {
+        return comentario;
     }
 
     public UUID getCalificadorIdOrDefault() {

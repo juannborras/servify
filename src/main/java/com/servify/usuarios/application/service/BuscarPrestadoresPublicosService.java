@@ -18,6 +18,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -60,6 +61,22 @@ public class BuscarPrestadoresPublicosService implements BuscarPrestadoresPublic
                 .toList();
     }
 
+    @Override
+    public Optional<PrestadorPublicoResult> obtenerPorUsuarioId(UUID usuarioId) {
+        if (usuarioId == null) {
+            return Optional.empty();
+        }
+        return usuarioRepositoryPort.buscarPorId(usuarioId)
+                .filter(usuario -> usuario.getEstado() == EstadoUsuario.ACTIVO)
+                .map(usuario -> {
+                    List<PublicacionServicio> publicaciones = publicacionServicioRepositoryPort.buscarActivas()
+                            .stream()
+                            .filter(publicacion -> usuarioId.equals(publicacion.getUsuarioId()))
+                            .toList();
+                    return construirResultado(usuario, publicaciones);
+                });
+    }
+
     private PrestadorPublicoResult construirResultado(Usuario usuario, List<PublicacionServicio> publicaciones) {
         PerfilUsuario perfil = usuario.getPerfil();
         NombreCompleto nombreCompleto = perfil != null ? perfil.getNombreCompleto() : null;
@@ -85,7 +102,8 @@ public class BuscarPrestadoresPublicosService implements BuscarPrestadoresPublic
                 precioDesde(publicaciones),
                 publicacionesActivas(publicaciones),
                 calificaciones.size(),
-                Math.round(promedio * 10.0) / 10.0
+                Math.round(promedio * 10.0) / 10.0,
+                resenasDestacadas(calificaciones)
         );
     }
 
@@ -180,6 +198,21 @@ public class BuscarPrestadoresPublicosService implements BuscarPrestadoresPublic
                         publicacion.getModalidadServicio(),
                         zonasPublicacion(publicacion),
                         publicacion.getPrecioBase()
+                ))
+                .toList();
+    }
+
+    private List<PrestadorPublicoResult.ResenaPublicaResult> resenasDestacadas(List<Calificacion> calificaciones) {
+        return calificaciones.stream()
+                .filter(calificacion -> calificacion.getComentario() != null && !calificacion.getComentario().isBlank())
+                .sorted(Comparator.comparing(
+                        Calificacion::getFechaCalificacion,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .map(calificacion -> new PrestadorPublicoResult.ResenaPublicaResult(
+                        calificacion.getPuntaje(),
+                        calificacion.getComentario(),
+                        calificacion.getFechaCalificacion()
                 ))
                 .toList();
     }

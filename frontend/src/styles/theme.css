@@ -107,6 +107,21 @@ body,
   background: linear-gradient(180deg, #111827 0%, #0f172a 100%) !important;
 }
 
+.dark .servify-google-auth-shell,
+.dark .servify-google-auth-shell > div,
+.dark .servify-google-auth-shell iframe {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dark .servify-google-auth-shell {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+.dark .servify-google-auth-placeholder {
+  color: #cbd5e1 !important;
+}
+
 .dark [style*="background: #f1f5f9"],
 .dark [style*="background:#f1f5f9"],
 .dark [style*="background: rgb(241, 245, 249)"],
@@ -555,6 +570,22 @@ body,
     linear-gradient(145deg, rgba(15, 23, 42, 0.86) 0%, rgba(2, 6, 23, 0.72) 100%) !important;
   border: 1px dashed rgba(148, 163, 184, 0.28);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.dark .servify-text-primary {
+  color: #f8fafc !important;
+}
+
+.dark .servify-text-secondary {
+  color: #cbd5e1 !important;
+}
+
+.dark .servify-text-muted {
+  color: #94a3b8 !important;
+}
+
+.dark .servify-text-soft {
+  color: #7dd3fc !important;
 }
 
 .dark .servify-sheet {

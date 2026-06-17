@@ -11,11 +11,12 @@ import {
   ImagePlus,
   Eye,
   EyeOff,
+  ArrowLeft,
 } from "lucide-react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, servifyApi, type RoleType, type SessionUser } from "../api";
 import servifySymbol from "../../imports/servify-symbol.png";
 
-type AuthTab = "login" | "register";
+type AuthTab = "login" | "register" | "forgot" | "reset";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -102,6 +103,13 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const [selectedRole, setSelectedRole] = useState<RoleType>(null);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetPass, setResetPass] = useState("");
+  const [resetPassConfirm, setResetPassConfirm] = useState("");
+  const [showResetPass, setShowResetPass] = useState(false);
+  const [showResetConfirmPass, setShowResetConfirmPass] = useState(false);
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -120,6 +128,9 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const passwordRules = getPasswordRules(registerPass);
   const passwordIsStrong = passwordRules.every((rule) => rule.valid);
   const passwordConfirmationMatches = Boolean(registerPassConfirm && registerPass === registerPassConfirm);
+  const resetPasswordRules = getPasswordRules(resetPass);
+  const resetPasswordIsStrong = resetPasswordRules.every((rule) => rule.valid);
+  const resetPasswordConfirmationMatches = Boolean(resetPassConfirm && resetPass === resetPassConfirm);
   const canAttemptRegister = Boolean(
     selectedRole &&
       registerEmail &&
@@ -129,6 +140,15 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       passwordIsStrong &&
       passwordConfirmationMatches
   );
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("resetToken");
+    if (!token) return;
+    setResetToken(token);
+    setTab("reset");
+    setError("");
+    setRecoveryMessage("");
+  }, []);
 
   const handleGoogleCredential = useCallback(
     async (idToken: string) => {
@@ -156,6 +176,50 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       onAuth(await servifyApi.login(loginEmail, loginPass));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesion");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestPasswordReset = async () => {
+    setError("");
+    setRecoveryMessage("");
+    setLoading(true);
+    try {
+      const result = await servifyApi.requestPasswordReset(recoveryEmail);
+      setRecoveryMessage(result.mensaje || "Si existe una cuenta asociada a ese email, enviaremos instrucciones.");
+      if (result.debugToken) {
+        setResetToken(result.debugToken);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo solicitar la recuperacion");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetPasswordIsStrong) {
+      setError("La contrasena debe tener mayuscula, minuscula, numero y caracter especial.");
+      return;
+    }
+    if (resetPass !== resetPassConfirm) {
+      setError("Las contrasenas no coinciden");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await servifyApi.resetPassword(resetToken, resetPass);
+      setRecoveryMessage("Contrasena actualizada. Ya podes iniciar sesion.");
+      setResetPass("");
+      setResetPassConfirm("");
+      setLoginEmail(recoveryEmail || loginEmail);
+      setLoginPass("");
+      setTab("login");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la contrasena");
     } finally {
       setLoading(false);
     }
@@ -241,12 +305,13 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         </p>
 
         <div className="flex mt-5 rounded-2xl p-1" style={{ background: "#eef2ff", width: "100%" }}>
-          {(["login", "register"] as AuthTab[]).map((t) => (
+          {(["login", "register"] as const).map((t) => (
             <button
               key={t}
               onClick={() => {
                 setTab(t);
                 setError("");
+                setRecoveryMessage("");
               }}
               className="flex-1 py-2 rounded-lg transition-all"
               style={{
@@ -282,6 +347,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
               </div>
 
               {error && <ErrorMessage message={error} />}
+              {recoveryMessage && <SuccessMessage message={recoveryMessage} />}
 
               <GoogleAuthButton
                 text="signin_with"
@@ -315,12 +381,187 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
               />
 
               <button
+                type="button"
+                onClick={() => {
+                  setRecoveryEmail(loginEmail.includes("@") ? loginEmail : "");
+                  setError("");
+                  setRecoveryMessage("");
+                  setTab("forgot");
+                }}
+                className="self-end transition-all active:scale-95"
+                style={{ color: "#2563eb", fontSize: 13, fontWeight: 800 }}
+              >
+                Olvide mi contrasena
+              </button>
+
+              <button
                 onClick={handleLogin}
                 disabled={loading}
                 className="w-full py-3.5 rounded-2xl mt-2 transition-all active:scale-95"
                 style={{ background: "#2563eb", color: "white", fontWeight: 700, fontSize: 15 }}
               >
                 {loading ? "Conectando..." : "Iniciar sesion"}
+              </button>
+            </motion.div>
+          ) : tab === "forgot" ? (
+            <motion.div
+              key="forgot"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.22 }}
+              className="flex flex-col gap-4"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("login");
+                  setError("");
+                  setRecoveryMessage("");
+                }}
+                className="flex items-center gap-2 self-start transition-all active:scale-95"
+                style={{ color: "#2563eb", fontSize: 13, fontWeight: 800 }}
+              >
+                <ArrowLeft size={16} strokeWidth={2} />
+                Volver
+              </button>
+              <div>
+                <p style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>Recuperar cuenta</p>
+                <p style={{ fontSize: 14, color: "#64748b", marginTop: 2 }}>
+                  Ingresa el email registrado y te enviaremos un enlace temporal.
+                </p>
+              </div>
+
+              {error && <ErrorMessage message={error} />}
+              {recoveryMessage && <SuccessMessage message={recoveryMessage} />}
+
+              <InputField
+                icon={<Mail size={17} color="#94a3b8" strokeWidth={1.8} />}
+                placeholder="Email registrado"
+                value={recoveryEmail}
+                onChange={setRecoveryEmail}
+                type="email"
+              />
+
+              <button
+                onClick={handleRequestPasswordReset}
+                disabled={loading || !recoveryEmail.trim()}
+                className="w-full py-3.5 rounded-2xl mt-2 transition-all active:scale-95"
+                style={{
+                  background: recoveryEmail.trim() ? "#2563eb" : "#cbd5e1",
+                  color: "white",
+                  fontWeight: 700,
+                  fontSize: 15,
+                }}
+              >
+                {loading ? "Enviando..." : "Enviar enlace"}
+              </button>
+
+              {resetToken && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab("reset");
+                    setError("");
+                  }}
+                  className="w-full py-3 rounded-2xl transition-all active:scale-95"
+                  style={{ background: "#eef2ff", color: "#2563eb", fontWeight: 800, fontSize: 14 }}
+                >
+                  Ya tengo un enlace de recuperacion
+                </button>
+              )}
+            </motion.div>
+          ) : tab === "reset" ? (
+            <motion.div
+              key="reset"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.22 }}
+              className="flex flex-col gap-4"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("login");
+                  setError("");
+                  setRecoveryMessage("");
+                }}
+                className="flex items-center gap-2 self-start transition-all active:scale-95"
+                style={{ color: "#2563eb", fontSize: 13, fontWeight: 800 }}
+              >
+                <ArrowLeft size={16} strokeWidth={2} />
+                Volver
+              </button>
+              <div>
+                <p style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>Nueva contrasena</p>
+                <p style={{ fontSize: 14, color: "#64748b", marginTop: 2 }}>
+                  Crea una contrasena segura para volver a entrar.
+                </p>
+              </div>
+
+              {error && <ErrorMessage message={error} />}
+
+              {!resetToken && (
+                <InputField
+                  icon={<Lock size={17} color="#94a3b8" strokeWidth={1.8} />}
+                  placeholder="Token de recuperacion"
+                  value={resetToken}
+                  onChange={setResetToken}
+                />
+              )}
+              <InputField
+                icon={<Lock size={17} color="#94a3b8" strokeWidth={1.8} />}
+                placeholder="Nueva contrasena"
+                value={resetPass}
+                onChange={setResetPass}
+                type={showResetPass ? "text" : "password"}
+                suffix={
+                  <button onClick={() => setShowResetPass(!showResetPass)}>
+                    {showResetPass ? (
+                      <EyeOff size={17} color="#94a3b8" strokeWidth={1.8} />
+                    ) : (
+                      <Eye size={17} color="#94a3b8" strokeWidth={1.8} />
+                    )}
+                  </button>
+                }
+              />
+              <PasswordRules rules={resetPasswordRules} />
+              <InputField
+                icon={<Lock size={17} color="#94a3b8" strokeWidth={1.8} />}
+                placeholder="Confirmar nueva contrasena"
+                value={resetPassConfirm}
+                onChange={setResetPassConfirm}
+                type={showResetConfirmPass ? "text" : "password"}
+                suffix={
+                  <button onClick={() => setShowResetConfirmPass(!showResetConfirmPass)}>
+                    {showResetConfirmPass ? (
+                      <EyeOff size={17} color="#94a3b8" strokeWidth={1.8} />
+                    ) : (
+                      <Eye size={17} color="#94a3b8" strokeWidth={1.8} />
+                    )}
+                  </button>
+                }
+              />
+              {resetPassConfirm && !resetPasswordConfirmationMatches ? (
+                <p style={{ color: "#dc2626", fontSize: 12, fontWeight: 700, marginTop: -8 }}>
+                  Las contrasenas no coinciden.
+                </p>
+              ) : null}
+
+              <button
+                onClick={handleResetPassword}
+                disabled={loading || !resetToken || !resetPasswordIsStrong || !resetPasswordConfirmationMatches}
+                className="w-full py-3.5 rounded-2xl mt-1 transition-all active:scale-95"
+                style={{
+                  background:
+                    resetToken && resetPasswordIsStrong && resetPasswordConfirmationMatches ? "#2563eb" : "#cbd5e1",
+                  color: "white",
+                  fontWeight: 700,
+                  fontSize: 15,
+                }}
+              >
+                {loading ? "Actualizando..." : "Guardar nueva contrasena"}
               </button>
             </motion.div>
           ) : (
@@ -511,7 +752,18 @@ function GoogleAuthButton({
   onError: (message: string) => void;
 }) {
   const [ready, setReady] = useState(false);
+  const [themeVersion, setThemeVersion] = useState(0);
   const buttonRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const targets = [document.documentElement, document.body, document.getElementById("root")].filter(
+      Boolean
+    ) as Element[];
+    const observer = new MutationObserver(() => setThemeVersion((value) => value + 1));
+
+    targets.forEach((target) => observer.observe(target, { attributes: true, attributeFilter: ["class"] }));
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -548,7 +800,7 @@ function GoogleAuthButton({
         buttonRef.current.innerHTML = "";
         window.google.accounts.id.renderButton(buttonRef.current, {
           type: "standard",
-          theme: "outline",
+          theme: isDarkModeEnabled() ? "filled_black" : "outline",
           size: "large",
           shape: "pill",
           text,
@@ -573,24 +825,33 @@ function GoogleAuthButton({
         buttonRef.current.innerHTML = "";
       }
     };
-  }, [onCredential, onError, text]);
+  }, [onCredential, onError, text, themeVersion]);
 
   return (
     <div
-      className="flex items-center justify-center rounded-2xl overflow-hidden"
+      className="servify-google-auth-shell flex items-center justify-center rounded-2xl overflow-hidden"
       style={{
         minHeight: 44,
-        background: "#ffffff",
+        background: ready ? "transparent" : "rgba(248, 250, 252, 0.88)",
         border: ready ? "1px solid transparent" : "1.5px solid #e2e8f0",
       }}
     >
       {!ready && (
-        <span style={{ color: "#64748b", fontSize: 14, fontWeight: 700 }}>
+        <span className="servify-google-auth-placeholder" style={{ color: "#64748b", fontSize: 14, fontWeight: 700 }}>
           {GOOGLE_CLIENT_ID ? "Cargando Google..." : "Configurar Google"}
         </span>
       )}
       <div ref={buttonRef} className="flex w-full justify-center" />
     </div>
+  );
+}
+
+function isDarkModeEnabled() {
+  return Boolean(
+    document.documentElement.classList.contains("dark") ||
+      document.body.classList.contains("dark") ||
+      document.getElementById("root")?.classList.contains("dark") ||
+      document.querySelector(".dark")
   );
 }
 
@@ -640,6 +901,14 @@ function ErrorMessage({ message }: { message: string }) {
   return (
     <div className="rounded-2xl px-4 py-3" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
       <p style={{ color: "#b91c1c", fontSize: 13, fontWeight: 600 }}>{message}</p>
+    </div>
+  );
+}
+
+function SuccessMessage({ message }: { message: string }) {
+  return (
+    <div className="rounded-2xl px-4 py-3" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+      <p style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>{message}</p>
     </div>
   );
 }

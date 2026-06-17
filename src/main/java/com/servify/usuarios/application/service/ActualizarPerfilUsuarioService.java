@@ -57,7 +57,7 @@ public class ActualizarPerfilUsuarioService implements ActualizarPerfilUsuarioUs
 
         aplicarActualizaciones(perfilUsuario, command);
 
-        boolean perfilCompleto = evaluarPerfilCompleto(perfilUsuario);
+        boolean perfilCompleto = evaluarPerfilCompleto(usuario, perfilUsuario);
         actualizarEstadoPerfilCompleto(perfilUsuario, perfilCompleto);
 
         PerfilUsuario perfilPersistido = perfilUsuarioRepositoryPort.guardar(perfilUsuario);
@@ -146,13 +146,16 @@ public class ActualizarPerfilUsuarioService implements ActualizarPerfilUsuarioUs
         }
     }
 
-    protected boolean evaluarPerfilCompleto(PerfilUsuario perfilUsuario) {
+    protected boolean evaluarPerfilCompleto(Usuario usuario, PerfilUsuario perfilUsuario) {
         // Centraliza la regla de negocio en PoliticaPerfilCompleto.
+        if (usuario == null) {
+            throw new ValidationException("El usuario es obligatorio");
+        }
         if (perfilUsuario == null) {
             throw new ValidationException("El perfil es obligatorio");
         }
 
-        return politicaPerfilCompleto.evaluar(perfilUsuario);
+        return politicaPerfilCompleto.evaluar(usuario, perfilUsuario);
     }
 
     protected void actualizarEstadoPerfilCompleto(PerfilUsuario perfilUsuario,
@@ -162,7 +165,7 @@ public class ActualizarPerfilUsuarioService implements ActualizarPerfilUsuarioUs
             throw new ValidationException("El perfil es obligatorio");
         }
 
-        perfilUsuario.recalcularEstadoPerfilCompleto();
+        perfilUsuario.actualizarEstadoPerfilCompleto(perfilCompleto);
     }
 
     protected void asociarPerfilAUsuarioSiCorresponde(Usuario usuario,

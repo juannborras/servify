@@ -578,6 +578,11 @@ class MvpApplicationFlowTests {
         }
 
         @Override
+        public List<CategoriaServicio> listarTodas() {
+            return List.copyOf(categorias.values());
+        }
+
+        @Override
         public List<CategoriaServicio> listarActivas() {
             return categorias.values().stream()
                     .filter(CategoriaServicio::estaActiva)

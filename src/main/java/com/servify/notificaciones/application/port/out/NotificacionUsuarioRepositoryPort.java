@@ -13,4 +13,6 @@ public interface NotificacionUsuarioRepositoryPort {
     Optional<NotificacionUsuario> buscarPorId(UUID notificacionId);
 
     List<NotificacionUsuario> buscarPorUsuarioId(UUID usuarioId);
+
+    void eliminarPorId(UUID notificacionId);
 }

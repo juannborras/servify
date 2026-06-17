@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiCategory, type ApiReceivedRequest, type ApiRequest, type ApiUserProfile } from "../api";
 
 type RequestTab = "my-requests" | "my-proposals";
+type TimeFilter = "active" | "30" | "90" | "all";
 type AssignmentState = Awaited<ReturnType<typeof servifyApi.getAssignmentState>>;
 
 export interface ServiceRequest {
@@ -17,6 +18,7 @@ export interface ServiceRequest {
   price: string;
   schedule: string;
   date: string;
+  rawDate?: string;
   status: "open" | "completed" | "cancelled" | "in-progress" | "counter-offer";
   requesterName: string;
   requesterInitials: string;
@@ -28,6 +30,7 @@ export interface ServiceRequest {
   availabilityFrom?: string;
   availabilityTo?: string;
   distributionId?: string;
+  counterOfferId?: string;
   providerId?: string;
   rawStatus?: string;
 }
@@ -52,17 +55,34 @@ const statusConfig = {
   "counter-offer": { label: "Contraoferta", bg: "#fff7ed", color: "#ea580c" },
 };
 
+const timeFilterOptions: { id: TimeFilter; label: string }[] = [
+  { id: "active", label: "Activas" },
+  { id: "30", label: "30 dias" },
+  { id: "90", label: "90 dias" },
+  { id: "all", label: "Todas" },
+];
+
 interface RequestsScreenProps {
   userId?: string;
   onRequestPress: (req: ServiceRequest) => void;
   onNewRequest: () => void;
   onRepeatRequest: (req: ServiceRequest) => void;
+  initialRequestId?: string | null;
+  onInitialRequestOpened?: () => void;
 }
 
-export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatRequest }: RequestsScreenProps) {
+export function RequestsScreen({
+  userId,
+  onRequestPress,
+  onNewRequest,
+  onRepeatRequest,
+  initialRequestId,
+  onInitialRequestOpened,
+}: RequestsScreenProps) {
   const [tab, setTab] = useState<RequestTab>("my-requests");
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
   const [apiReceived, setApiReceived] = useState<ServiceRequest[]>([]);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("active");
   const [actionLoading, setActionLoading] = useState("");
   const [counterOfferFor, setCounterOfferFor] = useState<string | null>(null);
   const [counterPrice, setCounterPrice] = useState("");
@@ -133,9 +153,18 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatR
   ];
 
   const data = useMemo(
-    () => sortRequestsForDisplay(tab === "my-requests" ? apiRequests : apiReceived),
-    [apiRequests, apiReceived, tab]
+    () => filterRequestsByTime(sortRequestsForDisplay(tab === "my-requests" ? apiRequests : apiReceived), timeFilter),
+    [apiRequests, apiReceived, tab, timeFilter]
   );
+
+  useEffect(() => {
+    if (!initialRequestId) return;
+    const matchingRequest = [...apiRequests, ...apiReceived].find((req) => String(req.id) === initialRequestId);
+    if (!matchingRequest) return;
+
+    onInitialRequestOpened?.();
+    onRequestPress(matchingRequest);
+  }, [apiReceived, apiRequests, initialRequestId, onInitialRequestOpened, onRequestPress]);
 
   const handleDistributionResponse = async (req: ServiceRequest, tipoRespuesta: "ACEPTAR" | "RECHAZAR") => {
     if (!userId || !req.distributionId) {
@@ -185,6 +214,28 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatR
       await loadRequests();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo emitir la contraoferta");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleKeepSearchingCounterOffer = async (req: ServiceRequest) => {
+    if (!userId || !req.counterOfferId) {
+      setError("Abri el detalle para resolver esta contraoferta.");
+      return;
+    }
+    setError("");
+    setActionLoading(`${req.id}-KEEP_SEARCHING`);
+    try {
+      await servifyApi.resolveCounterOffer({
+        contraofertaId: req.counterOfferId,
+        solicitanteId: userId,
+        decision: "RECHAZAR",
+      });
+      await servifyApi.retryDistribution(String(req.id));
+      await loadRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo seguir buscando prestadores");
     } finally {
       setActionLoading("");
     }
@@ -296,6 +347,25 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatR
             </button>
           ))}
         </div>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-3">
+          {timeFilterOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setTimeFilter(option.id)}
+              className="servify-chip shrink-0 rounded-full px-3 py-1.5 transition-all active:scale-95"
+              style={{
+                background: timeFilter === option.id ? "#dbeafe" : "#f1f5f9",
+                color: timeFilter === option.id ? "#2563eb" : "#64748b",
+                fontSize: 11,
+                fontWeight: 900,
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* List */}
@@ -313,6 +383,9 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatR
 
         {data.map((req, i) => {
           const st = statusConfig[req.status];
+          const showRepeat = canRepeatOwnRequest(req);
+          const showManage = canManageOwnRequest(req);
+          const showKeepSearching = canKeepSearchingCounterOffer(req);
           return (
             <motion.div
               key={req.id}
@@ -380,23 +453,37 @@ export function RequestsScreen({ userId, onRequestPress, onNewRequest, onRepeatR
                 </div>
               </div>
 
-              {req.viewerRole === "SOLICITANTE" ? (
+              {req.viewerRole === "SOLICITANTE" && (showRepeat || showManage || showKeepSearching) ? (
                 <div
                   className="servify-card-footer mt-4 pt-3 grid grid-cols-2 gap-2"
                   style={{ borderTop: "1px solid #f1f5f9" }}
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <button
-                    type="button"
-                    disabled={Boolean(actionLoading)}
-                    onClick={() => onRepeatRequest(req)}
-                    className="servify-action-button servify-action-teal flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
-                    style={{ fontSize: 12, fontWeight: 800 }}
-                  >
-                    <RefreshCcw size={14} strokeWidth={2} />
-                    Repetir
-                  </button>
-                  {canManageOwnRequest(req) ? (
+                  {showRepeat ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(actionLoading)}
+                      onClick={() => onRepeatRequest(req)}
+                      className="servify-action-button servify-action-teal flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      style={{ fontSize: 12, fontWeight: 800 }}
+                    >
+                      <RefreshCcw size={14} strokeWidth={2} />
+                      Repetir
+                    </button>
+                  ) : null}
+                  {showKeepSearching ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(actionLoading)}
+                      onClick={() => handleKeepSearchingCounterOffer(req)}
+                      className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
+                      style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
+                    >
+                      <RefreshCcw size={14} strokeWidth={2} />
+                      Seguir buscando
+                    </button>
+                  ) : null}
+                  {showManage ? (
                     <>
                   <button
                     type="button"
@@ -548,6 +635,7 @@ function mapRequest(
     price: formatMoney(req.precioReferencia),
     schedule: formatAvailability(req),
     date: date ? new Date(date).toLocaleDateString("es-AR") : "Sin fecha",
+    rawDate: date,
     status: toUiStatus(rawStatus),
     requesterName,
     requesterInitials: initialsFromName(requesterName),
@@ -598,12 +686,14 @@ function applyAssignmentState(
     state.distribucionesAceptadas?.[0]?.prestadorId ??
     state.contraofertasPendientes?.[0]?.prestadorId ??
     req.providerId;
+  const counterOfferId = state.contraofertasPendientes?.[0]?.id ?? req.counterOfferId;
   const providerName = providerId ? providerMap.get(providerId) ?? "Prestador asignado" : req.providerName;
   const providerInitials = providerName ? initialsFromName(providerName) : req.providerInitials;
   const withProvider = {
     ...req,
     proposals,
     providerId,
+    counterOfferId,
     providerName,
     providerInitials,
   };
@@ -635,13 +725,22 @@ function canProviderRespond(req: ServiceRequest): boolean {
     && (req.rawStatus ?? "").toUpperCase() === "ENVIADA";
 }
 
+function canRepeatOwnRequest(req: ServiceRequest): boolean {
+  return req.viewerRole === "SOLICITANTE"
+    && !["in-progress", "counter-offer", "completed"].includes(req.status);
+}
+
 function canManageOwnRequest(req: ServiceRequest): boolean {
   return req.viewerRole === "SOLICITANTE"
-    && !["completed", "cancelled"].includes(req.status);
+    && !["completed", "cancelled", "counter-offer", "in-progress"].includes(req.status);
 }
 
 function canEditOwnRequest(req: ServiceRequest): boolean {
   return req.viewerRole === "SOLICITANTE" && req.status === "open";
+}
+
+function canKeepSearchingCounterOffer(req: ServiceRequest): boolean {
+  return req.viewerRole === "SOLICITANTE" && req.status === "counter-offer";
 }
 
 function emptyEditForm(): EditRequestForm {
@@ -873,6 +972,21 @@ function collectProviderIds(
 
 function sortRequestsForDisplay(items: ServiceRequest[]): ServiceRequest[] {
   return [...items].sort((a, b) => requestStatusPriority(a) - requestStatusPriority(b));
+}
+
+function filterRequestsByTime(items: ServiceRequest[], filter: TimeFilter): ServiceRequest[] {
+  if (filter === "all") return items;
+  if (filter === "active") {
+    return items.filter((req) => ["open", "in-progress", "counter-offer"].includes(req.status));
+  }
+
+  const days = Number(filter);
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  return items.filter((req) => {
+    if (["open", "in-progress", "counter-offer"].includes(req.status)) return true;
+    const date = req.rawDate ? new Date(req.rawDate) : null;
+    return Boolean(date && !Number.isNaN(date.getTime()) && date.getTime() >= since);
+  });
 }
 
 function requestStatusPriority(req: ServiceRequest): number {

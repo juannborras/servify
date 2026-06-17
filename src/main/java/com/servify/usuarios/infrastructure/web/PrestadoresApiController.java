@@ -3,8 +3,10 @@ package com.servify.usuarios.infrastructure.web;
 import com.servify.usuarios.application.dto.PrestadorPublicoResult;
 import com.servify.usuarios.application.port.in.BuscarPrestadoresPublicosUseCase;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,5 +26,12 @@ public class PrestadoresApiController {
             @RequestParam(required = false) String nombreUsuario
     ) {
         return ResponseEntity.ok(buscarPrestadoresPublicosUseCase.buscarPorNombreUsuario(nombreUsuario));
+    }
+
+    @GetMapping("/{usuarioId}")
+    public ResponseEntity<PrestadorPublicoResult> obtenerPrestador(@PathVariable UUID usuarioId) {
+        return buscarPrestadoresPublicosUseCase.obtenerPorUsuarioId(usuarioId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

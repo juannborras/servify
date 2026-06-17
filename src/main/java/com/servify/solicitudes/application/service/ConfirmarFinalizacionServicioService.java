@@ -20,6 +20,7 @@ public class ConfirmarFinalizacionServicioService implements ConfirmarFinalizaci
     private final AsignacionServicioRepositoryPort asignacionServicioRepositoryPort;
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
     private final PoliticaFinalizacionMutua politicaFinalizacionMutua;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public ConfirmarFinalizacionServicioService(
             ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort,
@@ -27,10 +28,27 @@ public class ConfirmarFinalizacionServicioService implements ConfirmarFinalizaci
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
             PoliticaFinalizacionMutua politicaFinalizacionMutua
     ) {
+        this(
+                confirmacionFinalizacionRepositoryPort,
+                asignacionServicioRepositoryPort,
+                solicitudServicioRepositoryPort,
+                politicaFinalizacionMutua,
+                null
+        );
+    }
+
+    public ConfirmarFinalizacionServicioService(
+            ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            PoliticaFinalizacionMutua politicaFinalizacionMutua,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
         this.confirmacionFinalizacionRepositoryPort = confirmacionFinalizacionRepositoryPort;
         this.asignacionServicioRepositoryPort = asignacionServicioRepositoryPort;
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
         this.politicaFinalizacionMutua = politicaFinalizacionMutua;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -66,11 +84,13 @@ public class ConfirmarFinalizacionServicioService implements ConfirmarFinalizaci
         ConfirmacionFinalizacion confirmacion = construirConfirmacion(command, fecha);
         persistirConfirmacion(confirmacion);
 
+        boolean yaFinalizada = asignacion.estaFinalizada();
         List<ConfirmacionFinalizacion> confirmaciones = obtenerConfirmacionesDeAsignacion(asignacion.getId());
         evaluarYCerrarSiCorresponde(solicitud, asignacion, confirmaciones, fecha);
 
         persistirAsignacion(asignacion);
         persistirSolicitud(solicitud);
+        notificarFinalizacion(solicitud, asignacion, command.getRolConfirmante(), yaFinalizada);
     }
 
     protected SolicitudServicio obtenerSolicitudExistente(UUID solicitudId) {
@@ -206,5 +226,21 @@ public class ConfirmarFinalizacionServicioService implements ConfirmarFinalizaci
 
     protected LocalDateTime obtenerFechaActual() {
         return LocalDateTime.now();
+    }
+
+    protected void notificarFinalizacion(
+            SolicitudServicio solicitud,
+            AsignacionServicio asignacion,
+            com.servify.solicitudes.domain.enumtype.RolConfirmante rolConfirmante,
+            boolean yaFinalizada
+    ) {
+        if (notificadorEventosSolicitudService == null) {
+            return;
+        }
+        if (!yaFinalizada && asignacion.estaFinalizada()) {
+            notificadorEventosSolicitudService.servicioFinalizado(solicitud, asignacion);
+            return;
+        }
+        notificadorEventosSolicitudService.confirmacionFinalizacion(solicitud, asignacion, rolConfirmante);
     }
 }

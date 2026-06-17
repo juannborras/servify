@@ -43,6 +43,7 @@ public class ConsultarCalificacionServicioService implements ConsultarCalificaci
                 .calificadoId(calificacion.getCalificadoId())
                 .rolCalificador(calificacion.getRolCalificador())
                 .puntaje(calificacion.getPuntaje())
+                .comentario(calificacion.getComentario())
                 .fechaCalificacion(calificacion.getFechaCalificacion())
                 .build();
     }

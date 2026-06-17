@@ -19,6 +19,7 @@ public class DistribuidorSolicitudService {
     private final PublicacionesCompatiblesPort publicacionesCompatiblesPort;
     private final ConfiguracionDistribucionPort configuracionDistribucionPort;
     private final MotorDistribucionSolicitudes motorDistribucionSolicitudes;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public DistribuidorSolicitudService(
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
@@ -26,10 +27,27 @@ public class DistribuidorSolicitudService {
             ConfiguracionDistribucionPort configuracionDistribucionPort,
             MotorDistribucionSolicitudes motorDistribucionSolicitudes
     ) {
+        this(
+                distribucionSolicitudRepositoryPort,
+                publicacionesCompatiblesPort,
+                configuracionDistribucionPort,
+                motorDistribucionSolicitudes,
+                null
+        );
+    }
+
+    public DistribuidorSolicitudService(
+            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+            PublicacionesCompatiblesPort publicacionesCompatiblesPort,
+            ConfiguracionDistribucionPort configuracionDistribucionPort,
+            MotorDistribucionSolicitudes motorDistribucionSolicitudes,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.publicacionesCompatiblesPort = publicacionesCompatiblesPort;
         this.configuracionDistribucionPort = configuracionDistribucionPort;
         this.motorDistribucionSolicitudes = motorDistribucionSolicitudes;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     public List<DistribucionSolicitud> distribuir(SolicitudServicio solicitud) {
@@ -67,6 +85,9 @@ public class DistribuidorSolicitudService {
         List<DistribucionSolicitud> guardadas = nuevas.stream()
                 .map(distribucionSolicitudRepositoryPort::guardar)
                 .toList();
+        if (!guardadas.isEmpty() && notificadorEventosSolicitudService != null) {
+            notificadorEventosSolicitudService.nuevaSolicitudCompatible(solicitud, guardadas);
+        }
         if (realineadas.isEmpty()) {
             return guardadas;
         }

@@ -22,6 +22,7 @@ public class Calificacion extends BaseEntity {
     private UUID calificadoId;
     private RolConfirmante rolCalificador;
     private Integer puntaje;
+    private String comentario;
     private LocalDateTime fechaCalificacion;
 
     protected Calificacion() {
@@ -35,7 +36,7 @@ public class Calificacion extends BaseEntity {
                         Integer puntaje,
                         LocalDateTime fechaCalificacion) {
         this(id, solicitudId, asignacionServicioId, solicitanteId, prestadorId,
-                solicitanteId, prestadorId, RolConfirmante.SOLICITANTE, puntaje, fechaCalificacion);
+                solicitanteId, prestadorId, RolConfirmante.SOLICITANTE, puntaje, null, fechaCalificacion);
     }
 
     public Calificacion(UUID id,
@@ -48,6 +49,21 @@ public class Calificacion extends BaseEntity {
                         RolConfirmante rolCalificador,
                         Integer puntaje,
                         LocalDateTime fechaCalificacion) {
+        this(id, solicitudId, asignacionServicioId, solicitanteId, prestadorId,
+                calificadorId, calificadoId, rolCalificador, puntaje, null, fechaCalificacion);
+    }
+
+    public Calificacion(UUID id,
+                        UUID solicitudId,
+                        UUID asignacionServicioId,
+                        UUID solicitanteId,
+                        UUID prestadorId,
+                        UUID calificadorId,
+                        UUID calificadoId,
+                        RolConfirmante rolCalificador,
+                        Integer puntaje,
+                        String comentario,
+                        LocalDateTime fechaCalificacion) {
         super(id);
         this.solicitudId = solicitudId;
         this.asignacionServicioId = asignacionServicioId;
@@ -57,6 +73,7 @@ public class Calificacion extends BaseEntity {
         this.calificadoId = calificadoId;
         this.rolCalificador = rolCalificador;
         this.puntaje = puntaje;
+        this.comentario = normalizarComentario(comentario);
         this.fechaCalificacion = fechaCalificacion;
     }
 
@@ -90,6 +107,10 @@ public class Calificacion extends BaseEntity {
 
     public Integer getPuntaje() {
         return puntaje;
+    }
+
+    public String getComentario() {
+        return comentario;
     }
 
     public LocalDateTime getFechaCalificacion() {
@@ -126,5 +147,16 @@ public class Calificacion extends BaseEntity {
             throw new IllegalArgumentException("El puntaje debe ser un valor entre 1 y 5");
         }
         this.puntaje = puntaje;
+    }
+
+    private String normalizarComentario(String valor) {
+        if (valor == null || valor.trim().isEmpty()) {
+            return null;
+        }
+        String normalizado = valor.trim();
+        if (normalizado.length() > 500) {
+            throw new IllegalArgumentException("El comentario no puede exceder 500 caracteres");
+        }
+        return normalizado;
     }
 }

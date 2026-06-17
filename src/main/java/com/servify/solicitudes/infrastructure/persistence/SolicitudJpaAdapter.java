@@ -367,6 +367,7 @@ class CalificacionJpaAdapterImpl implements CalificacionRepositoryPort {
         e.setCalificadoId(SolicitudServicioJpaAdapterImpl.longFromUuid(c.getCalificadoId()));
         e.setRolCalificador(c.getRolCalificador() != null ? c.getRolCalificador().name().toLowerCase() : null);
         e.setPuntaje(c.getPuntaje());
+        e.setComentario(c.getComentario());
         return e;
     }
 
@@ -397,7 +398,7 @@ class CalificacionJpaAdapterImpl implements CalificacionRepositoryPort {
                 UsuarioJpaAdapter.uuidFromLong(e.getId()), solicitudId,
                 UsuarioJpaAdapter.uuidFromLong(e.getAsignacionId()),
                 solicitanteId, prestadorId, calificadorId, calificadoId,
-                rolCalificador, e.getPuntaje(), e.getCreatedAt());
+                rolCalificador, e.getPuntaje(), e.getComentario(), e.getCreatedAt());
         if (e.getCreatedAt() != null) c.marcarCreacion(e.getCreatedAt());
         return c;
     }

@@ -2,17 +2,32 @@ package com.servify.solicitudes.application.service;
 
 import com.servify.solicitudes.application.dto.CancelarSolicitudServicioCommand;
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.out.DistribucionSolicitudRepositoryPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
+import com.servify.solicitudes.domain.model.DistribucionSolicitud;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
 
+import java.util.List;
 import java.util.UUID;
 
 public class CancelarSolicitudServicioService implements CancelarSolicitudServicioUseCase {
 
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
+    private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public CancelarSolicitudServicioService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort) {
+        this(solicitudServicioRepositoryPort, null, null);
+    }
+
+    public CancelarSolicitudServicioService(
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
+        this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -35,6 +50,7 @@ public class CancelarSolicitudServicioService implements CancelarSolicitudServic
 
         solicitud.cancelar();
         persistirSolicitud(solicitud);
+        notificarCancelacion(solicitud);
     }
 
     protected SolicitudServicio obtenerSolicitudExistente(UUID solicitudId) {
@@ -71,5 +87,13 @@ public class CancelarSolicitudServicioService implements CancelarSolicitudServic
             throw new IllegalArgumentException("Solicitud no puede ser nula");
         }
         this.solicitudServicioRepositoryPort.guardar(solicitudServicio);
+    }
+
+    protected void notificarCancelacion(SolicitudServicio solicitud) {
+        if (notificadorEventosSolicitudService == null || distribucionSolicitudRepositoryPort == null) {
+            return;
+        }
+        List<DistribucionSolicitud> distribuciones = distribucionSolicitudRepositoryPort.buscarPorSolicitudId(solicitud.getId());
+        notificadorEventosSolicitudService.solicitudCancelada(solicitud, distribuciones);
     }
 }

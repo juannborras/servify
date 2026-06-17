@@ -121,7 +121,9 @@ public class Usuario extends BaseEntity {
 
     public boolean tienePerfilCompleto() {
         // Usa la marca persistida, pero tambien recalcula para no bloquear perfiles viejos.
-        return perfil != null
+        return contacto != null
+                && contacto.emailValido()
+                && perfil != null
                 && (Boolean.TRUE.equals(perfil.getPerfilCompleto()) || perfil.estaCompleto());
     }
 

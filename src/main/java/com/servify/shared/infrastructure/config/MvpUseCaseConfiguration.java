@@ -20,10 +20,14 @@ import com.servify.autenticacion.application.port.in.CerrarSesionUseCase;
 import com.servify.autenticacion.application.port.in.AutenticarConIdentidadExternaUseCase;
 import com.servify.autenticacion.application.port.in.IniciarSesionUseCase;
 import com.servify.autenticacion.application.port.in.RegistrarCredencialesUseCase;
+import com.servify.autenticacion.application.port.in.RestablecerPasswordUseCase;
 import com.servify.autenticacion.application.port.in.RenovarTokenUseCase;
+import com.servify.autenticacion.application.port.in.SolicitarRecuperacionPasswordUseCase;
 import com.servify.autenticacion.application.port.out.CredencialAccesoRepositoryPort;
 import com.servify.autenticacion.application.port.out.IdentidadExternaRepositoryPort;
 import com.servify.autenticacion.application.port.out.PasswordHasherPort;
+import com.servify.autenticacion.application.port.out.PasswordResetEmailSenderPort;
+import com.servify.autenticacion.application.port.out.PasswordResetTokenRepositoryPort;
 import com.servify.autenticacion.application.port.out.ProveedorIdentidadVerifierPort;
 import com.servify.autenticacion.application.port.out.RefreshTokenRepositoryPort;
 import com.servify.autenticacion.application.port.out.TokenProviderPort;
@@ -32,12 +36,18 @@ import com.servify.autenticacion.application.service.AutenticarConIdentidadExter
 import com.servify.autenticacion.application.service.CerrarSesionService;
 import com.servify.autenticacion.application.service.IniciarSesionService;
 import com.servify.autenticacion.application.service.RegistrarCredencialesService;
+import com.servify.autenticacion.application.service.RestablecerPasswordService;
 import com.servify.autenticacion.application.service.RenovarTokenService;
+import com.servify.autenticacion.application.service.SolicitarRecuperacionPasswordService;
+import com.servify.chat.application.port.out.MensajeChatRepositoryPort;
+import com.servify.chat.application.service.ChatSolicitudService;
 import com.servify.notificaciones.application.port.in.CrearNotificacionUsuarioUseCase;
+import com.servify.notificaciones.application.port.in.EliminarNotificacionUsuarioUseCase;
 import com.servify.notificaciones.application.port.in.ListarNotificacionesUsuarioUseCase;
 import com.servify.notificaciones.application.port.in.MarcarNotificacionLeidaUseCase;
 import com.servify.notificaciones.application.port.out.NotificacionUsuarioRepositoryPort;
 import com.servify.notificaciones.application.service.CrearNotificacionUsuarioService;
+import com.servify.notificaciones.application.service.EliminarNotificacionUsuarioService;
 import com.servify.notificaciones.application.service.ListarNotificacionesUsuarioService;
 import com.servify.notificaciones.application.service.MarcarNotificacionLeidaService;
 import com.servify.publicaciones.application.port.in.ActualizarCategoriaServicioUseCase;
@@ -48,6 +58,7 @@ import com.servify.publicaciones.application.port.in.CambiarEstadoPublicacionUse
 import com.servify.publicaciones.application.port.in.CrearCategoriaServicioUseCase;
 import com.servify.publicaciones.application.port.in.CrearPublicacionUseCase;
 import com.servify.publicaciones.application.port.in.ListarCategoriasActivasUseCase;
+import com.servify.publicaciones.application.port.in.ListarCategoriasUseCase;
 import com.servify.publicaciones.application.port.in.ListarPublicacionesPorCategoriaUseCase;
 import com.servify.publicaciones.application.port.in.ListarPublicacionesDeUsuarioUseCase;
 import com.servify.publicaciones.application.port.in.ObtenerPublicacionUseCase;
@@ -62,6 +73,7 @@ import com.servify.publicaciones.application.service.CambiarEstadoPublicacionSer
 import com.servify.publicaciones.application.service.CrearCategoriaServicioService;
 import com.servify.publicaciones.application.service.CrearPublicacionService;
 import com.servify.publicaciones.application.service.ListarCategoriasActivasService;
+import com.servify.publicaciones.application.service.ListarCategoriasService;
 import com.servify.publicaciones.application.service.ListarPublicacionesPorCategoriaService;
 import com.servify.publicaciones.application.service.ListarPublicacionesDeUsuarioService;
 import com.servify.publicaciones.application.service.ObtenerPublicacionService;
@@ -104,6 +116,7 @@ import com.servify.solicitudes.application.service.EmitirContraofertaService;
 import com.servify.solicitudes.application.service.ListarSolicitudesDelSolicitanteService;
 import com.servify.solicitudes.application.service.ListarSolicitudesRecibidasDetalladasService;
 import com.servify.solicitudes.application.service.ListarSolicitudesRecibidasService;
+import com.servify.solicitudes.application.service.NotificadorEventosSolicitudService;
 import com.servify.solicitudes.application.service.ObtenerEstadoAsignacionSolicitudService;
 import com.servify.solicitudes.application.service.ObtenerSolicitudServicioService;
 import com.servify.solicitudes.application.service.ReintentarDistribucionSolicitudService;
@@ -134,6 +147,7 @@ import com.servify.usuarios.application.service.ObtenerConfiguracionCuentaServic
 import com.servify.usuarios.application.service.ObtenerPerfilUsuarioService;
 import com.servify.usuarios.application.service.ObtenerReputacionUsuarioService;
 import com.servify.usuarios.domain.service.PoliticaPerfilCompleto;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -277,6 +291,44 @@ public class MvpUseCaseConfiguration {
     }
 
     @Bean
+    SolicitarRecuperacionPasswordUseCase solicitarRecuperacionPasswordUseCase(
+            CredencialAccesoRepositoryPort credencialAccesoRepositoryPort,
+            PasswordResetTokenRepositoryPort passwordResetTokenRepositoryPort,
+            PasswordResetEmailSenderPort passwordResetEmailSenderPort,
+            TokenProviderPort tokenProviderPort,
+            UsuarioAutenticablePort usuarioAutenticablePort,
+            @Value("${servify.password-reset.frontend-url:http://localhost:5173}") String frontendUrl,
+            @Value("${servify.password-reset.token-ttl-minutes:30}") long tokenTtlMinutes,
+            @Value("${servify.password-reset.expose-debug-token:false}") boolean exposeDebugToken
+    ) {
+        return new SolicitarRecuperacionPasswordService(
+                credencialAccesoRepositoryPort,
+                passwordResetTokenRepositoryPort,
+                passwordResetEmailSenderPort,
+                tokenProviderPort,
+                usuarioAutenticablePort,
+                frontendUrl,
+                tokenTtlMinutes,
+                exposeDebugToken
+        );
+    }
+
+    @Bean
+    RestablecerPasswordUseCase restablecerPasswordUseCase(
+            PasswordResetTokenRepositoryPort passwordResetTokenRepositoryPort,
+            CredencialAccesoRepositoryPort credencialAccesoRepositoryPort,
+            PasswordHasherPort passwordHasherPort,
+            TokenProviderPort tokenProviderPort
+    ) {
+        return new RestablecerPasswordService(
+                passwordResetTokenRepositoryPort,
+                credencialAccesoRepositoryPort,
+                passwordHasherPort,
+                tokenProviderPort
+        );
+    }
+
+    @Bean
     RenovarTokenUseCase renovarTokenUseCase(
             RefreshTokenRepositoryPort refreshTokenRepositoryPort,
             CredencialAccesoRepositoryPort credencialAccesoRepositoryPort,
@@ -346,6 +398,13 @@ public class MvpUseCaseConfiguration {
             CategoriaServicioRepositoryPort categoriaServicioRepositoryPort
     ) {
         return new ListarCategoriasActivasService(categoriaServicioRepositoryPort);
+    }
+
+    @Bean
+    ListarCategoriasUseCase listarCategoriasUseCase(
+            CategoriaServicioRepositoryPort categoriaServicioRepositoryPort
+    ) {
+        return new ListarCategoriasService(categoriaServicioRepositoryPort);
     }
 
     @Bean
@@ -424,13 +483,15 @@ public class MvpUseCaseConfiguration {
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
             PublicacionesCompatiblesPort publicacionesCompatiblesPort,
             ConfiguracionDistribucionPort configuracionDistribucionPort,
-            MotorDistribucionSolicitudes motorDistribucionSolicitudes
+            MotorDistribucionSolicitudes motorDistribucionSolicitudes,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new DistribuidorSolicitudService(
                 distribucionSolicitudRepositoryPort,
                 publicacionesCompatiblesPort,
                 configuracionDistribucionPort,
-                motorDistribucionSolicitudes
+                motorDistribucionSolicitudes,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -503,11 +564,13 @@ public class MvpUseCaseConfiguration {
     @Bean
     ResponderDistribucionSolicitudUseCase responderDistribucionSolicitudUseCase(
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
-            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new ResponderDistribucionSolicitudService(
                 distribucionSolicitudRepositoryPort,
-                solicitudServicioRepositoryPort
+                solicitudServicioRepositoryPort,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -515,12 +578,14 @@ public class MvpUseCaseConfiguration {
     EmitirContraofertaUseCase emitirContraofertaUseCase(
             ContraofertaRepositoryPort contraofertaRepositoryPort,
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
-            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new EmitirContraofertaService(
                 contraofertaRepositoryPort,
                 distribucionSolicitudRepositoryPort,
-                solicitudServicioRepositoryPort
+                solicitudServicioRepositoryPort,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -528,12 +593,14 @@ public class MvpUseCaseConfiguration {
     ResolverContraofertaUseCase resolverContraofertaUseCase(
             ContraofertaRepositoryPort contraofertaRepositoryPort,
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
-            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new ResolverContraofertaService(
                 contraofertaRepositoryPort,
                 distribucionSolicitudRepositoryPort,
-                solicitudServicioRepositoryPort
+                solicitudServicioRepositoryPort,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -542,13 +609,15 @@ public class MvpUseCaseConfiguration {
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
-            PoliticaAsignacionUnica politicaAsignacionUnica
+            PoliticaAsignacionUnica politicaAsignacionUnica,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new ConfirmarAsignacionSolicitudService(
                 solicitudServicioRepositoryPort,
                 distribucionSolicitudRepositoryPort,
                 asignacionServicioRepositoryPort,
-                politicaAsignacionUnica
+                politicaAsignacionUnica,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -557,13 +626,15 @@ public class MvpUseCaseConfiguration {
             ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort,
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
-            PoliticaFinalizacionMutua politicaFinalizacionMutua
+            PoliticaFinalizacionMutua politicaFinalizacionMutua,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new ConfirmarFinalizacionServicioService(
                 confirmacionFinalizacionRepositoryPort,
                 asignacionServicioRepositoryPort,
                 solicitudServicioRepositoryPort,
-                politicaFinalizacionMutua
+                politicaFinalizacionMutua,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -572,13 +643,15 @@ public class MvpUseCaseConfiguration {
             CalificacionRepositoryPort calificacionRepositoryPort,
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
-            PoliticaCalificacion politicaCalificacion
+            PoliticaCalificacion politicaCalificacion,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
         return new CalificarServicioService(
                 calificacionRepositoryPort,
                 solicitudServicioRepositoryPort,
                 asignacionServicioRepositoryPort,
-                politicaCalificacion
+                politicaCalificacion,
+                notificadorEventosSolicitudService
         );
     }
 
@@ -591,9 +664,15 @@ public class MvpUseCaseConfiguration {
 
     @Bean
     CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase(
-            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
     ) {
-        return new CancelarSolicitudServicioService(solicitudServicioRepositoryPort);
+        return new CancelarSolicitudServicioService(
+                solicitudServicioRepositoryPort,
+                distribucionSolicitudRepositoryPort,
+                notificadorEventosSolicitudService
+        );
     }
 
     @Bean
@@ -672,6 +751,13 @@ public class MvpUseCaseConfiguration {
     }
 
     @Bean
+    NotificadorEventosSolicitudService notificadorEventosSolicitudService(
+            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase
+    ) {
+        return new NotificadorEventosSolicitudService(crearNotificacionUsuarioUseCase);
+    }
+
+    @Bean
     ListarNotificacionesUsuarioUseCase listarNotificacionesUsuarioUseCase(
             NotificacionUsuarioRepositoryPort notificacionUsuarioRepositoryPort
     ) {
@@ -684,4 +770,29 @@ public class MvpUseCaseConfiguration {
     ) {
         return new MarcarNotificacionLeidaService(notificacionUsuarioRepositoryPort);
     }
+
+    @Bean
+    EliminarNotificacionUsuarioUseCase eliminarNotificacionUsuarioUseCase(
+            NotificacionUsuarioRepositoryPort notificacionUsuarioRepositoryPort
+    ) {
+        return new EliminarNotificacionUsuarioService(notificacionUsuarioRepositoryPort);
+    }
+
+    @Bean
+    ChatSolicitudService chatSolicitudService(
+            MensajeChatRepositoryPort mensajeChatRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase
+    ) {
+        return new ChatSolicitudService(
+                mensajeChatRepositoryPort,
+                solicitudServicioRepositoryPort,
+                distribucionSolicitudRepositoryPort,
+                asignacionServicioRepositoryPort,
+                crearNotificacionUsuarioUseCase
+        );
+    }
+
 }

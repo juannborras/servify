@@ -17,6 +17,8 @@ public interface CategoriaServicioRepositoryPort {
 
     Optional<CategoriaServicio> buscarPorNombre(String nombre);
 
+    List<CategoriaServicio> listarTodas();
+
     List<CategoriaServicio> listarActivas();
 
     boolean existePorNombre(String nombre);

@@ -19,7 +19,9 @@ interface SettingsDrawerProps {
   onClose: () => void;
   onLogout: () => void;
   onOpenAdmin: () => void;
+  onOpenNotifications: () => void;
   onUserUpdated: (patch: Partial<SessionUser>) => void;
+  unreadNotificationCount?: number;
 }
 
 const SETTINGS_KEY = "servify.settings";
@@ -52,7 +54,16 @@ const defaultSettings: StoredSettings = {
   },
 };
 
-export function SettingsDrawer({ open, user, onClose, onLogout, onOpenAdmin, onUserUpdated }: SettingsDrawerProps) {
+export function SettingsDrawer({
+  open,
+  user,
+  onClose,
+  onLogout,
+  onOpenAdmin,
+  onOpenNotifications,
+  onUserUpdated,
+  unreadNotificationCount = 0,
+}: SettingsDrawerProps) {
   const [view, setView] = useState<SettingsView>("menu");
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
 
@@ -137,9 +148,11 @@ export function SettingsDrawer({ open, user, onClose, onLogout, onOpenAdmin, onU
               {view === "menu" ? (
                 <MenuView
                   showAdmin={user?.apiRole === "ADMIN"}
+                  unreadNotificationCount={unreadNotificationCount}
                   onSelect={setView}
                   onLogout={onLogout}
                   onOpenAdmin={onOpenAdmin}
+                  onOpenNotifications={onOpenNotifications}
                 />
               ) : null}
               {view === "account" ? (
@@ -217,32 +230,43 @@ export function SettingsDrawer({ open, user, onClose, onLogout, onOpenAdmin, onU
 
 function MenuView({
   showAdmin,
+  unreadNotificationCount,
   onSelect,
   onLogout,
   onOpenAdmin,
+  onOpenNotifications,
 }: {
   showAdmin: boolean;
+  unreadNotificationCount: number;
   onSelect: (view: SettingsView) => void;
   onLogout: () => void;
   onOpenAdmin: () => void;
+  onOpenNotifications: () => void;
 }) {
   const items = [
     { icon: <User size={18} />, label: "Cuenta", detail: "Datos, usuario y perfil", view: "account" as SettingsView },
     { icon: <Moon size={18} />, label: "Apariencia", detail: "Modo claro, oscuro o sistema", view: "appearance" as SettingsView },
-    { icon: <Bell size={18} />, label: "Notificaciones", detail: "Alertas de actividad", view: "notifications" as SettingsView },
+    { icon: <Bell size={18} />, label: "Preferencias", detail: "Alertas de actividad", view: "notifications" as SettingsView },
     { icon: <Lock size={18} />, label: "Privacidad", detail: "Datos visibles en tu perfil", view: "privacy" as SettingsView },
     { icon: <HelpCircle size={18} />, label: "Ayuda", detail: "Soporte y version", view: "help" as SettingsView },
   ];
 
   return (
     <div className="flex flex-col gap-2">
+      <MenuItem
+        icon={<Bell size={18} />}
+        label="Bandeja"
+        detail={unreadNotificationCount > 0 ? `${unreadNotificationCount} sin leer` : "Notificaciones al dia"}
+        index={0}
+        onClick={onOpenNotifications}
+      />
       {items.map((item, index) => (
         <MenuItem
           key={item.view}
           icon={item.icon}
           label={item.label}
           detail={item.detail}
-          index={index}
+          index={index + 1}
           onClick={() => onSelect(item.view)}
         />
       ))}

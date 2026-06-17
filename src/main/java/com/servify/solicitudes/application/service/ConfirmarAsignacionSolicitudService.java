@@ -20,15 +20,31 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
     private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
     private final AsignacionServicioRepositoryPort asignacionServicioRepositoryPort;
     private final PoliticaAsignacionUnica politicaAsignacionUnica;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public ConfirmarAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
                                                DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
                                                AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
                                                PoliticaAsignacionUnica politicaAsignacionUnica) {
+        this(
+                solicitudServicioRepositoryPort,
+                distribucionSolicitudRepositoryPort,
+                asignacionServicioRepositoryPort,
+                politicaAsignacionUnica,
+                null
+        );
+    }
+
+    public ConfirmarAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                               DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+                                               AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+                                               PoliticaAsignacionUnica politicaAsignacionUnica,
+                                               NotificadorEventosSolicitudService notificadorEventosSolicitudService) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.asignacionServicioRepositoryPort = asignacionServicioRepositoryPort;
         this.politicaAsignacionUnica = politicaAsignacionUnica;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -72,6 +88,7 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
         if (this.politicaAsignacionUnica.requiereCerrarDistribucionesRestantes()) {
             cerrarDistribucionesRestantes(solicitud.getId(), distribucion.getId());
         }
+        notificarAsignacion(solicitud, asignacionGuardada);
 
         return construirResultado(asignacionGuardada);
     }
@@ -176,5 +193,11 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
 
     protected LocalDateTime obtenerFechaActual() {
         return LocalDateTime.now();
+    }
+
+    protected void notificarAsignacion(SolicitudServicio solicitud, AsignacionServicio asignacion) {
+        if (notificadorEventosSolicitudService != null) {
+            notificadorEventosSolicitudService.servicioAsignado(solicitud, asignacion);
+        }
     }
 }

@@ -55,6 +55,11 @@ class CategoriaServicioJpaAdapter implements CategoriaServicioRepositoryPort {
     }
 
     @Override
+    public List<CategoriaServicio> listarTodas() {
+        return categoriaRepo.findAll().stream().map(this::toCategoriaDomain).toList();
+    }
+
+    @Override
     public boolean existePorNombre(String nombre) {
         return categoriaRepo.existsByNombreIgnoreCase(nombre);
     }

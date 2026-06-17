@@ -293,7 +293,7 @@ export interface ApiAdminUser {
 export interface ApiNotification {
   id: string;
   usuarioId: string;
-  tipo: "MODERACION_PUBLICACION" | "MODERACION_USUARIO";
+  tipo: string;
   titulo: string;
   mensaje: string;
   referenciaTipo?: string;
@@ -319,6 +319,13 @@ export interface ApiPublicProvider {
   publicacionesActivas?: ApiPublicProviderPublication[];
   cantidadValoraciones: number;
   promedioEstrellas: number;
+  resenasDestacadas?: ApiPublicReview[];
+}
+
+export interface ApiPublicReview {
+  puntaje: number;
+  comentario?: string;
+  fechaCalificacion?: string;
 }
 
 export interface ApiPublicProviderPublication {
@@ -339,7 +346,18 @@ export interface ApiServiceRating {
   calificadoId?: string;
   rolCalificador: "SOLICITANTE" | "PRESTADOR";
   puntaje: number;
+  comentario?: string;
   fechaCalificacion?: string;
+}
+
+export interface ApiChatMessage {
+  id: string;
+  solicitudId: string;
+  solicitanteId: string;
+  prestadorId: string;
+  remitenteId: string;
+  contenido: string;
+  fechaEnvio?: string;
 }
 
 export interface ProfilePreferences {
@@ -539,6 +557,20 @@ export const servifyApi = {
     };
     this.storeSession(user);
     return user;
+  },
+
+  requestPasswordReset(email: string) {
+    return request<{ mensaje: string; fechaExpiracion?: string; debugToken?: string }>("/auth/password-reset", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  resetPassword(token: string, nuevaPassword: string) {
+    return request<void>("/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token, nuevaPassword }),
+    });
   },
 
   async loginWithGoogle(idToken: string): Promise<SessionUser> {
@@ -781,6 +813,10 @@ export const servifyApi = {
     return request<ApiPublicProvider[]>(`/prestadores${query ? `?${query}` : ""}`);
   },
 
+  getPublicProvider(usuarioId: string) {
+    return request<ApiPublicProvider>(`/prestadores/${usuarioId}`);
+  },
+
   async changePublicationState(publicacionId: string, usuarioId: string, active: boolean) {
     return request<ApiPublication>(`/publicaciones/${publicacionId}/estado`, {
       method: "PATCH",
@@ -857,6 +893,10 @@ export const servifyApi = {
     return request<ApiRequest[]>(`/usuarios/${usuarioId}/solicitudes`);
   },
 
+  getRequest(solicitudId: string) {
+    return request<ApiRequest>(`/solicitudes/${solicitudId}`);
+  },
+
   cancelRequest(solicitudId: string, solicitanteId: string) {
     return request<void>(`/solicitudes/${solicitudId}`, {
       method: "DELETE",
@@ -922,6 +962,12 @@ export const servifyApi = {
     return request<ApiAssignmentState>(`/solicitudes/${solicitudId}/estado-asignacion`);
   },
 
+  retryDistribution(solicitudId: string) {
+    return request<ApiAcceptedDistribution[]>(`/solicitudes/${solicitudId}/distribuciones/reintentos`, {
+      method: "POST",
+    });
+  },
+
   confirmAssignment(input: {
     solicitudId: string;
     distribucionSolicitudId: string;
@@ -965,6 +1011,7 @@ export const servifyApi = {
     calificadorId: string;
     rolCalificador: "SOLICITANTE" | "PRESTADOR";
     puntaje: number;
+    comentario?: string;
   }) {
     return request<void>(`/solicitudes/${input.solicitudId}/calificaciones`, {
       method: "POST",
@@ -975,6 +1022,7 @@ export const servifyApi = {
         calificadorId: input.calificadorId,
         rolCalificador: input.rolCalificador,
         puntaje: input.puntaje,
+        comentario: input.comentario ?? "",
       }),
     });
   },
@@ -989,6 +1037,21 @@ export const servifyApi = {
       rolCalificador: input.rolCalificador,
     });
     return request<ApiServiceRating>(`/solicitudes/${input.solicitudId}/calificaciones?${params.toString()}`);
+  },
+
+  listChatMessages(solicitudId: string, prestadorId: string) {
+    const params = new URLSearchParams({ prestadorId });
+    return request<ApiChatMessage[]>(`/solicitudes/${solicitudId}/chat?${params.toString()}`);
+  },
+
+  sendChatMessage(input: { solicitudId: string; prestadorId: string; contenido: string }) {
+    return request<ApiChatMessage>(`/solicitudes/${input.solicitudId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({
+        prestadorId: input.prestadorId,
+        contenido: input.contenido,
+      }),
+    });
   },
 
   getAccountConfig(userId: string) {
@@ -1062,6 +1125,24 @@ export const servifyApi = {
     });
   },
 
+  listAdminCategories() {
+    return request<ApiCategory[]>("/admin/categorias");
+  },
+
+  createAdminCategory(input: { nombre: string; descripcion?: string }) {
+    return request<ApiCategory>("/admin/categorias", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  changeAdminCategoryState(categoriaId: string, input: { estadoDestino: "ACTIVA" | "INACTIVA"; motivo: string }) {
+    return request<ApiCategory>(`/admin/categorias/${categoriaId}/estado`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  },
+
   listNotifications(usuarioId: string) {
     return request<ApiNotification[]>(`/usuarios/${usuarioId}/notificaciones`);
   },
@@ -1069,6 +1150,12 @@ export const servifyApi = {
   markNotificationRead(usuarioId: string, notificacionId: string) {
     return request<ApiNotification>(`/usuarios/${usuarioId}/notificaciones/${notificacionId}/lectura`, {
       method: "PATCH",
+    });
+  },
+
+  deleteNotification(usuarioId: string, notificacionId: string) {
+    return request<void>(`/usuarios/${usuarioId}/notificaciones/${notificacionId}`, {
+      method: "DELETE",
     });
   },
 };

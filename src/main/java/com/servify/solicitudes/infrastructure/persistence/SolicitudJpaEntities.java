@@ -132,6 +132,7 @@ class CalificacionJpaEntity {
     @Column(name = "calificado_id", nullable = false) private Long calificadoId;
     @Column(name = "rol_calificador", nullable = false) private String rolCalificador;
     @Column(name = "puntaje", nullable = false) private Integer puntaje;
+    @Column(name = "comentario", length = 500) private String comentario;
     @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
 
     protected CalificacionJpaEntity() {}
@@ -141,6 +142,7 @@ class CalificacionJpaEntity {
     public Long getCalificadoId() { return calificadoId; } public void setCalificadoId(Long v) { this.calificadoId = v; }
     public String getRolCalificador() { return rolCalificador; } public void setRolCalificador(String v) { this.rolCalificador = v; }
     public Integer getPuntaje() { return puntaje; } public void setPuntaje(Integer v) { this.puntaje = v; }
+    public String getComentario() { return comentario; } public void setComentario(String v) { this.comentario = v; }
     public LocalDateTime getCreatedAt() { return createdAt; } public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
 }
 

@@ -270,7 +270,8 @@ public class SolicitudesApiController {
                         request.prestadorId,
                         request.puntaje,
                         request.calificadorId,
-                        request.rolCalificador
+                        request.rolCalificador,
+                        request.comentario
                 )
         );
         return ResponseEntity.created(URI.create("/api/v1/solicitudes/" + solicitudId + "/calificaciones")).build();
@@ -353,6 +354,7 @@ public class SolicitudesApiController {
         public UUID calificadorId;
         public RolConfirmante rolCalificador;
         public Integer puntaje;
+        public String comentario;
     }
 
     public static class CancelarSolicitudRequest {

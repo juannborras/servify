@@ -114,6 +114,11 @@ public class NotificacionUsuarioJpaAdapter implements NotificacionUsuarioReposit
                 .toList();
     }
 
+    @Override
+    public void eliminarPorId(UUID notificacionId) {
+        notificacionRepo.deleteById(notificacionId);
+    }
+
     private NotificacionUsuarioJpaEntity toEntity(NotificacionUsuario notificacion) {
         NotificacionUsuarioJpaEntity entity = new NotificacionUsuarioJpaEntity();
         entity.setId(notificacion.getId());

@@ -8,6 +8,7 @@ import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryP
 import com.servify.solicitudes.domain.enumtype.EstadoContraoferta;
 import com.servify.solicitudes.domain.model.Contraoferta;
 import com.servify.solicitudes.domain.model.DistribucionSolicitud;
+import com.servify.solicitudes.domain.model.SolicitudServicio;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -18,13 +19,22 @@ public class EmitirContraofertaService implements EmitirContraofertaUseCase {
     private final ContraofertaRepositoryPort contraofertaRepositoryPort;
     private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public EmitirContraofertaService(ContraofertaRepositoryPort contraofertaRepositoryPort,
                                      DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
                                      SolicitudServicioRepositoryPort solicitudServicioRepositoryPort) {
+        this(contraofertaRepositoryPort, distribucionSolicitudRepositoryPort, solicitudServicioRepositoryPort, null);
+    }
+
+    public EmitirContraofertaService(ContraofertaRepositoryPort contraofertaRepositoryPort,
+                                     DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+                                     SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                     NotificadorEventosSolicitudService notificadorEventosSolicitudService) {
         this.contraofertaRepositoryPort = contraofertaRepositoryPort;
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -49,7 +59,7 @@ public class EmitirContraofertaService implements EmitirContraofertaUseCase {
         DistribucionSolicitud distribucion = obtenerDistribucionExistente(command.getDistribucionSolicitudId());
         validarPertenenciaPrestador(distribucion, command.getPrestadorId());
         validarContraofertaPermitida(distribucion);
-        validarSolicitudAsociadaActiva(distribucion);
+        SolicitudServicio solicitud = validarSolicitudAsociadaActiva(distribucion);
         validarAusenciaDeContraofertaPendiente(distribucion.getId());
 
         LocalDateTime ahora = obtenerFechaActual();
@@ -59,6 +69,7 @@ public class EmitirContraofertaService implements EmitirContraofertaUseCase {
 
         persistirContraoferta(contraoferta);
         persistirDistribucion(distribucion);
+        notificarContraoferta(solicitud, contraoferta);
     }
 
     protected DistribucionSolicitud obtenerDistribucionExistente(UUID distribucionSolicitudId) {
@@ -96,18 +107,16 @@ public class EmitirContraofertaService implements EmitirContraofertaUseCase {
         }
     }
 
-    protected void validarSolicitudAsociadaActiva(DistribucionSolicitud distribucionSolicitud) {
+    protected SolicitudServicio validarSolicitudAsociadaActiva(DistribucionSolicitud distribucionSolicitud) {
         if (distribucionSolicitud == null) {
             throw new IllegalArgumentException("distribucionSolicitud no puede ser nula");
         }
-        this.solicitudServicioRepositoryPort.buscarPorId(distribucionSolicitud.getSolicitudId())
-                .ifPresentOrElse(solicitud -> {
-                    if (!solicitud.puedeRecibirRespuestas()) {
-                        throw new IllegalStateException("La solicitud asociada no está activa o ya no acepta respuestas");
-                    }
-                }, () -> {
-                    throw new IllegalArgumentException("Solicitud asociada no encontrada: " + distribucionSolicitud.getSolicitudId());
-                });
+        SolicitudServicio solicitud = this.solicitudServicioRepositoryPort.buscarPorId(distribucionSolicitud.getSolicitudId())
+                .orElseThrow(() -> new IllegalArgumentException("Solicitud asociada no encontrada: " + distribucionSolicitud.getSolicitudId()));
+        if (!solicitud.puedeRecibirRespuestas()) {
+            throw new IllegalStateException("La solicitud asociada no está activa o ya no acepta respuestas");
+        }
+        return solicitud;
     }
 
     protected void validarAusenciaDeContraofertaPendiente(UUID distribucionSolicitudId) {
@@ -164,6 +173,12 @@ public class EmitirContraofertaService implements EmitirContraofertaUseCase {
             throw new IllegalArgumentException("distribucionSolicitud no puede ser nula");
         }
         this.distribucionSolicitudRepositoryPort.guardar(distribucionSolicitud);
+    }
+
+    protected void notificarContraoferta(SolicitudServicio solicitud, Contraoferta contraoferta) {
+        if (notificadorEventosSolicitudService != null) {
+            notificadorEventosSolicitudService.contraofertaRecibida(solicitud, contraoferta);
+        }
     }
 
     protected EstadoContraoferta obtenerEstadoInicialContraoferta() {

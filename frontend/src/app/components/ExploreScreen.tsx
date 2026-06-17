@@ -20,13 +20,24 @@ const popularCategories = new Set(["Oficios", "Clases particulares", "Soporte tÃ
 
 interface ExploreScreenProps {
   userName: string;
+  notificationCount?: number;
+  onOpenNotifications?: () => void;
   onCreateRequest: () => void;
   onCategoryPress: (cat: string) => void;
   onAcceptedRequest?: (request: ServiceRequest) => void;
   onProviderPress: (provider: ApiPublicProvider) => void;
 }
 
-export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress, onAcceptedRequest, onProviderPress }: ExploreScreenProps & { user?: SessionUser | null }) {
+export function ExploreScreen({
+  user,
+  userName,
+  notificationCount = 0,
+  onOpenNotifications,
+  onCreateRequest,
+  onCategoryPress,
+  onAcceptedRequest,
+  onProviderPress,
+}: ExploreScreenProps & { user?: SessionUser | null }) {
   const firstName = userName.split(" ")[0];
   const [remoteRequests, setRemoteRequests] = useState<ApiReceivedRequest[] | null>(null);
   const [ownRequests, setOwnRequests] = useState<ApiRequest[]>([]);
@@ -227,18 +238,18 @@ export function ExploreScreen({ user, userName, onCreateRequest, onCategoryPress
           </div>
           <button
             type="button"
-            onClick={() => setActivityOpen((open) => !open)}
+            onClick={() => onOpenNotifications?.()}
             className="relative flex items-center justify-center rounded-2xl"
             style={{ width: 44, height: 44, background: "#f1f5f9" }}
           >
             <Bell size={20} color="#475569" strokeWidth={1.8} />
-            {activity.badgeCount > 0 ? (
+            {notificationCount > 0 ? (
               <div
                 className="absolute -top-1 -right-1 rounded-full flex items-center justify-center"
                 style={{ minWidth: 18, height: 18, padding: "0 5px", background: "#ef4444", border: "2px solid white" }}
               >
                 <span style={{ color: "white", fontSize: 10, fontWeight: 800 }}>
-                  {activity.badgeCount > 9 ? "9+" : activity.badgeCount}
+                  {notificationCount > 9 ? "9+" : notificationCount}
                 </span>
               </div>
             ) : null}

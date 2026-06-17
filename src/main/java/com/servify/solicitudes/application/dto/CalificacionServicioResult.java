@@ -14,6 +14,7 @@ public class CalificacionServicioResult {
     private UUID calificadoId;
     private RolConfirmante rolCalificador;
     private Integer puntaje;
+    private String comentario;
     private LocalDateTime fechaCalificacion;
 
     private CalificacionServicioResult() {
@@ -45,6 +46,10 @@ public class CalificacionServicioResult {
 
     public Integer getPuntaje() {
         return puntaje;
+    }
+
+    public String getComentario() {
+        return comentario;
     }
 
     public LocalDateTime getFechaCalificacion() {
@@ -95,6 +100,11 @@ public class CalificacionServicioResult {
 
         public Builder puntaje(Integer puntaje) {
             instance.puntaje = puntaje;
+            return this;
+        }
+
+        public Builder comentario(String comentario) {
+            instance.comentario = comentario;
             return this;
         }
 

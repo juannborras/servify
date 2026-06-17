@@ -20,13 +20,23 @@ public class ResponderDistribucionSolicitudService implements ResponderDistribuc
 
     private final DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort;
     private final SolicitudServicioRepositoryPort solicitudServicioRepositoryPort;
+    private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
 
     public ResponderDistribucionSolicitudService(
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort
     ) {
+        this(distribucionSolicitudRepositoryPort, solicitudServicioRepositoryPort, null);
+    }
+
+    public ResponderDistribucionSolicitudService(
+            DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
+        this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
     }
 
     @Override
@@ -49,11 +59,12 @@ public class ResponderDistribucionSolicitudService implements ResponderDistribuc
         DistribucionSolicitud distribucion = obtenerDistribucionExistente(command.getDistribucionSolicitudId());
         validarPertenenciaPrestador(distribucion, command.getPrestadorId());
         validarRespuestaPermitida(distribucion);
-        validarSolicitudAsociadaActiva(distribucion);
+        SolicitudServicio solicitud = validarSolicitudAsociadaActiva(distribucion);
 
         LocalDateTime fechaRespuesta = obtenerFechaActual();
         aplicarRespuesta(distribucion, command.getTipoRespuesta(), fechaRespuesta);
         persistirDistribucion(distribucion);
+        notificarRespuesta(solicitud, distribucion, command.getTipoRespuesta());
     }
 
     protected DistribucionSolicitud obtenerDistribucionExistente(UUID distribucionSolicitudId) {
@@ -91,7 +102,7 @@ public class ResponderDistribucionSolicitudService implements ResponderDistribuc
         }
     }
 
-    protected void validarSolicitudAsociadaActiva(DistribucionSolicitud distribucionSolicitud) {
+    protected SolicitudServicio validarSolicitudAsociadaActiva(DistribucionSolicitud distribucionSolicitud) {
         if (distribucionSolicitud == null) {
             throw new IllegalArgumentException("Distribución no puede ser nula");
         }
@@ -104,6 +115,7 @@ public class ResponderDistribucionSolicitudService implements ResponderDistribuc
         if (!solicitud.puedeRecibirRespuestas()) {
             throw new IllegalStateException("La solicitud asociada no está disponible para recibir respuestas");
         }
+        return solicitud;
     }
 
     protected void aplicarRespuesta(DistribucionSolicitud distribucionSolicitud,
@@ -126,6 +138,16 @@ public class ResponderDistribucionSolicitudService implements ResponderDistribuc
             throw new IllegalArgumentException("Distribución no puede ser nula");
         }
         this.distribucionSolicitudRepositoryPort.guardar(distribucionSolicitud);
+    }
+
+    protected void notificarRespuesta(
+            SolicitudServicio solicitud,
+            DistribucionSolicitud distribucion,
+            TipoRespuestaDistribucion tipoRespuesta
+    ) {
+        if (notificadorEventosSolicitudService != null) {
+            notificadorEventosSolicitudService.respuestaPrestador(solicitud, distribucion, tipoRespuesta);
+        }
     }
 
     protected LocalDateTime obtenerFechaActual() {

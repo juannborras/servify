@@ -1,6 +1,7 @@
 # Alineacion Kanban y roadmap MVP - Servify
 
-Fecha de analisis: 2026-06-11
+Fecha de analisis: 2026-06-11  
+Actualizacion Sprint 3: 2026-06-17
 
 ## Evidencia revisada y ejecutada
 
@@ -19,6 +20,13 @@ Resultado de tests: 24 tests, 0 fallos, build exitoso.
 Resultado de build frontend: `npm run frontend:build` exitoso.
 
 Resultado de persistencia SQL: la prueba E2E creo y persistio usuarios, credenciales, perfiles, categoria, publicacion, solicitud finalizada, solicitud cancelada, asignacion finalizada y dos calificaciones en PostgreSQL local.
+
+Actualizacion tecnica del 2026-06-17:
+
+- Frontend: `npm run build` exitoso.
+- Backend: `.\mvnw.cmd test` exitoso, 28 tests, 0 fallos, 0 errores.
+- No quedaron procesos locales de prueba corriendo.
+- Jira sincronizado mediante Atlassian Rovo remoto.
 
 ## Funcionalidades cubiertas
 
@@ -55,6 +63,19 @@ Resultado de persistencia SQL: la prueba E2E creo y persistio usuarios, credenci
 - US28 Identidad: existe login social/verificacion OIDC, pero no verificacion avanzada documental.
 - US31 Analitica: hay configuracion/admin basico; faltan metricas avanzadas.
 
+### Sprint 3 cubierto al 2026-06-17
+
+- Recuperacion de cuenta por email registrado con token temporal y validacion de nueva contrasena.
+- Notificaciones internas persistidas para moderacion, matching, contraofertas, cancelaciones, finalizacion, calificaciones y chat.
+- App instalable como PWA mediante manifest, iconos y service worker basico.
+- Flujo de contraoferta corregido: el cliente puede seguir buscando antes de aceptar el precio.
+- Chat interno asociado a solicitud, abierto en pantalla completa para mobile.
+- Calificaciones con comentario persistente asociado a la solicitud/servicio.
+- Perfil publico liviano: datos visibles primero, servicios activos bajo demanda y comentarios destacados.
+- Historial de solicitudes/servicios con filtro por activas, 30 dias, 90 dias o todas.
+- Panel admin ampliado para gestionar categorias con alta, baja logica y reactivacion.
+- Multicategoria queda pendiente por requerir cambio de modelo relacional y ajuste del matching.
+
 ## Actualizacion Kanban ejecutada en Jira
 
 ### Movido a Finalizado
@@ -86,6 +107,28 @@ Justificacion: la app React ya tiene navegacion principal y flujo de publicacion
 
 - Consulta JQL ejecutada: `project = SVF AND labels = mvp AND status != Finalizado ORDER BY key ASC`.
 - Resultado: solo queda abierto `SVF-112 Estimar costos operativos del MVP`, en estado `En curso`.
+
+### Actualizacion Jira ejecutada el 2026-06-17
+
+El 2026-06-17 se actualizo el proyecto `SVF` mediante Atlassian Rovo remoto.
+
+Cambios aplicados:
+
+- Se agrego comentario de actualizacion Sprint 3 en `SVF-8 - Product Backlog del MVP`.
+- Se crearon nuevas historias:
+  - `SVF-137 - US40 - Instalar Servify como PWA mobile`.
+  - `SVF-138 - US41 - Resolver contraofertas con opcion de seguir buscando`.
+  - `SVF-139 - US42 - Administrar categorias desde panel admin`.
+  - `SVF-140 - US43 - Asociar publicaciones y solicitudes a multiples categorias`.
+- Se movieron a `En revision`:
+  - `SVF-92 - US19 - Historial de servicios prestados`.
+  - `SVF-97 - US24 - Chat en tiempo real`.
+  - `SVF-99 - US26 - Comentarios escritos`.
+  - `SVF-137 - US40 - Instalar Servify como PWA mobile`.
+  - `SVF-138 - US41 - Resolver contraofertas con opcion de seguir buscando`.
+  - `SVF-139 - US42 - Administrar categorias desde panel admin`.
+- Se mantuvo `SVF-140` como `Pendiente` por dependencia tecnica de modelo relacional y matching.
+- Se agregaron comentarios de trazabilidad en `SVF-90`, `SVF-92`, `SVF-93`, `SVF-94`, `SVF-97`, `SVF-99`, `SVF-100` y `SVF-136`.
 
 ### Mantener Pendiente o En curso
 
@@ -189,12 +232,11 @@ Justificacion: la app React ya tiene navegacion principal y flujo de publicacion
 
 ## Release futuro que conviene adelantar
 
-- Recuperacion de password: alto valor, bajo riesgo si se implementa con token temporal fake/local primero.
-- Perfil publico consolidado del prestador: reutiliza perfil + reputacion + publicaciones; mejora confianza y demo.
-- Historial claro para solicitante/prestador: ya hay endpoints base; falta separar vistas y estados finales.
-- Notificaciones basicas in-app: empezar con centro de notificaciones persistido o badges locales, sin push real.
 - Reportes/denuncias simples: tabla + endpoint + vista admin; prepara seguridad comunitaria.
-- Comentarios escritos en calificacion: extension natural de reputacion, sin integrar pagos/chat.
+- Auditoria de moderacion administrativa: registrar quien modero, que cambio hizo, motivo y fecha.
+- Push notifications reales: Web Push o integracion nativa si se avanza hacia app mobile empaquetada.
+- Chat tiempo real estricto: WebSocket/SSE si el polling actual no alcanza.
+- Publicaciones/solicitudes con multiples categorias: requiere migracion y ajuste del matching.
 - Metricas admin basicas: conteos de usuarios, publicaciones, solicitudes por estado y conversion de matching.
 
 ## User stories sugeridas
@@ -208,7 +250,9 @@ Justificacion: la app React ya tiene navegacion principal y flujo de publicacion
 
 ## Acceso a Jira para actualizarlo
 
-No hay conector Jira instalado en esta sesion. Opciones:
+El conector Atlassian Rovo remoto quedo operativo y permitio actualizar Jira directamente el 2026-06-17.
+
+Opciones alternativas:
 
 1. API de Jira Cloud: compartir URL del sitio, project key, email de la cuenta y API token. Lo ideal es pasarlo como variables de entorno o secreto temporal, no pegarlo en texto plano.
 2. CSV import: puedo generar un CSV con `Issue key`, `Summary`, `Status`, `Labels`, `Fix version` y `Comment` para que lo importen desde Jira.

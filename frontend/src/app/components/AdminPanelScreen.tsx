@@ -11,10 +11,12 @@ import {
   FileWarning,
   Mail,
   MapPin,
+  Plus,
   RefreshCcw,
   Search,
   Shield,
   Star,
+  Trash2,
   UserRound,
   UserX,
 } from "lucide-react";
@@ -25,6 +27,7 @@ import {
   fromApiModality,
   servifyApi,
   type ApiAdminUser,
+  type ApiCategory,
   type ApiPublicProvider,
   type ApiPublication,
   type ApiPublicationState,
@@ -58,9 +61,12 @@ interface AdminUserView extends ApiAdminUser {
 export function AdminPanelScreen({ onBack, onProviderPress }: AdminPanelScreenProps) {
   const [adminUser, setAdminUser] = useState<ApiAdminUser | null>(null);
   const [users, setUsers] = useState<AdminUserView[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedPublication, setSelectedPublication] = useState<ApiPublication | null>(null);
   const [query, setQuery] = useState("");
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryDescription, setCategoryDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
   const [error, setError] = useState("");
@@ -72,8 +78,10 @@ export function AdminPanelScreen({ onBack, onProviderPress }: AdminPanelScreenPr
       const admin = await servifyApi.getAdminSession();
       setAdminUser(admin);
       const groupedUsers = await Promise.all(userStates.map((state) => servifyApi.listAdminUsers(state)));
+      const adminCategories = await servifyApi.listAdminCategories().catch(() => []);
       const uniqueUsers = uniqueById(groupedUsers.flat());
       const enrichedUsers = await Promise.all(uniqueUsers.map(enrichAdminUser));
+      setCategories(adminCategories);
       setUsers(enrichedUsers.sort(compareUsersByRisk));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar administracion");
@@ -96,6 +104,46 @@ export function AdminPanelScreen({ onBack, onProviderPress }: AdminPanelScreenPr
     if (!normalizedQuery) return users;
     return users.filter((user) => user.searchText.includes(normalizedQuery));
   }, [query, users]);
+
+  const createCategory = async () => {
+    if (!categoryName.trim()) {
+      setError("Indica el nombre de la categoria.");
+      return;
+    }
+    setActionLoading("category-create");
+    setError("");
+    try {
+      await servifyApi.createAdminCategory({
+        nombre: categoryName.trim(),
+        descripcion: categoryDescription.trim() || `Servicios de ${categoryName.trim()}`,
+      });
+      setCategoryName("");
+      setCategoryDescription("");
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo crear la categoria");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const changeCategoryState = async (category: ApiCategory, active: boolean) => {
+    const motivo = window.prompt(active ? "Motivo para reactivar la categoria" : "Motivo para desactivar la categoria");
+    if (!motivo?.trim()) return;
+    setActionLoading(`${category.id}-${active ? "ACTIVA" : "INACTIVA"}`);
+    setError("");
+    try {
+      await servifyApi.changeAdminCategoryState(category.id, {
+        estadoDestino: active ? "ACTIVA" : "INACTIVA",
+        motivo: motivo.trim(),
+      });
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la categoria");
+    } finally {
+      setActionLoading("");
+    }
+  };
 
   const changeUserState = async (targetUser: AdminUserView, nuevoEstado: ApiUserState) => {
     const motivo = window.prompt(`Motivo para cambiar la cuenta a ${nuevoEstado.toLowerCase()}`);
@@ -207,6 +255,18 @@ export function AdminPanelScreen({ onBack, onProviderPress }: AdminPanelScreenPr
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-7 pt-4">
+        <CategoryAdminPanel
+          categories={categories}
+          categoryName={categoryName}
+          categoryDescription={categoryDescription}
+          loading={actionLoading}
+          onNameChange={setCategoryName}
+          onDescriptionChange={setCategoryDescription}
+          onCreate={createCategory}
+          onActivate={(category) => changeCategoryState(category, true)}
+          onDeactivate={(category) => changeCategoryState(category, false)}
+        />
+
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p style={{ color: "#0f172a", fontSize: 18, fontWeight: 900 }}>Usuarios</p>
@@ -252,6 +312,122 @@ export function AdminPanelScreen({ onBack, onProviderPress }: AdminPanelScreenPr
         </div>
       </div>
     </div>
+  );
+}
+
+function CategoryAdminPanel({
+  categories,
+  categoryName,
+  categoryDescription,
+  loading,
+  onNameChange,
+  onDescriptionChange,
+  onCreate,
+  onActivate,
+  onDeactivate,
+}: {
+  categories: ApiCategory[];
+  categoryName: string;
+  categoryDescription: string;
+  loading: string;
+  onNameChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onCreate: () => void;
+  onActivate: (category: ApiCategory) => void;
+  onDeactivate: (category: ApiCategory) => void;
+}) {
+  return (
+    <section
+      className="servify-card servify-request-card mb-5 rounded-2xl bg-white p-4"
+      style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 style={{ color: "#0f172a", fontSize: 17, fontWeight: 900 }}>Categorias</h2>
+          <p style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>
+            Alta y baja logica para el catalogo de servicios
+          </p>
+        </div>
+        <span className="servify-chip rounded-full px-3 py-1.5" style={{ background: "#ecfeff", color: "#0891b2", fontSize: 11, fontWeight: 900 }}>
+          {categories.length}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2">
+        <input
+          value={categoryName}
+          onChange={(event) => onNameChange(event.target.value)}
+          placeholder="Nueva categoria"
+          className="servify-form-surface rounded-xl px-3 py-2.5 outline-none"
+          style={{ border: "1.5px solid #e2e8f0", color: "#0f172a", fontSize: 13, fontWeight: 700 }}
+        />
+        <input
+          value={categoryDescription}
+          onChange={(event) => onDescriptionChange(event.target.value)}
+          placeholder="Descripcion opcional"
+          className="servify-form-surface rounded-xl px-3 py-2.5 outline-none"
+          style={{ border: "1.5px solid #e2e8f0", color: "#0f172a", fontSize: 13, fontWeight: 700 }}
+        />
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={loading === "category-create"}
+          className="servify-action-button servify-action-teal flex items-center justify-center gap-1.5 rounded-xl py-2.5 transition-all active:scale-95"
+          style={{ fontSize: 12, fontWeight: 900, opacity: loading === "category-create" ? 0.65 : 1 }}
+        >
+          <Plus size={14} strokeWidth={2.2} />
+          {loading === "category-create" ? "Agregando..." : "Agregar categoria"}
+        </button>
+      </div>
+
+      <div className="mt-4 flex max-h-60 flex-col gap-2 overflow-y-auto">
+        {categories.length === 0 ? (
+          <p className="rounded-2xl px-4 py-3" style={{ background: "#f8fafc", color: "#64748b", fontSize: 13, fontWeight: 800 }}>
+            No hay categorias cargadas.
+          </p>
+        ) : null}
+        {categories.map((category) => {
+          const active = (category.estado ?? "").toUpperCase() === "ACTIVA";
+          return (
+            <div
+              key={category.id}
+              className="servify-form-surface flex items-center justify-between gap-3 rounded-2xl px-3 py-3"
+              style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}
+            >
+              <div className="min-w-0">
+                <p style={{ color: "#0f172a", fontSize: 13, fontWeight: 900 }}>{category.nombre}</p>
+                <p style={{ color: active ? "#16a34a" : "#94a3b8", fontSize: 11, fontWeight: 900, marginTop: 2 }}>
+                  {active ? "Activa" : "Inactiva"}
+                </p>
+              </div>
+              {active ? (
+                <button
+                  type="button"
+                  onClick={() => onDeactivate(category)}
+                  disabled={loading.startsWith(category.id)}
+                  className="servify-action-button servify-action-warning flex items-center gap-1 rounded-xl px-3 py-2 transition-all active:scale-95"
+                  style={{ fontSize: 11, fontWeight: 900, opacity: loading.startsWith(category.id) ? 0.55 : 1 }}
+                >
+                  <Trash2 size={13} strokeWidth={2.2} />
+                  Desactivar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onActivate(category)}
+                  disabled={loading.startsWith(category.id)}
+                  className="servify-action-button servify-action-success flex items-center gap-1 rounded-xl px-3 py-2 transition-all active:scale-95"
+                  style={{ fontSize: 11, fontWeight: 900, opacity: loading.startsWith(category.id) ? 0.55 : 1 }}
+                >
+                  <RefreshCcw size={13} strokeWidth={2.2} />
+                  Reactivar
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

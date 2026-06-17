@@ -3,14 +3,19 @@ package com.servify.autenticacion.infrastructure.web;
 import com.servify.autenticacion.application.dto.AutenticarConIdentidadExternaCommand;
 import com.servify.autenticacion.application.dto.CerrarSesionCommand;
 import com.servify.autenticacion.application.dto.IniciarSesionCommand;
+import com.servify.autenticacion.application.dto.RecuperacionPasswordResult;
 import com.servify.autenticacion.application.dto.RegistrarCredencialesCommand;
+import com.servify.autenticacion.application.dto.RestablecerPasswordCommand;
 import com.servify.autenticacion.application.dto.RenovarTokenCommand;
 import com.servify.autenticacion.application.dto.SesionResult;
+import com.servify.autenticacion.application.dto.SolicitarRecuperacionPasswordCommand;
 import com.servify.autenticacion.application.port.in.AutenticarConIdentidadExternaUseCase;
 import com.servify.autenticacion.application.port.in.CerrarSesionUseCase;
 import com.servify.autenticacion.application.port.in.IniciarSesionUseCase;
 import com.servify.autenticacion.application.port.in.RegistrarCredencialesUseCase;
+import com.servify.autenticacion.application.port.in.RestablecerPasswordUseCase;
 import com.servify.autenticacion.application.port.in.RenovarTokenUseCase;
+import com.servify.autenticacion.application.port.in.SolicitarRecuperacionPasswordUseCase;
 import com.servify.autenticacion.domain.enumtype.ProveedorIdentidadExterna;
 import com.servify.usuarios.domain.enumtype.Rol;
 import java.net.URI;
@@ -32,19 +37,25 @@ public class AuthApiController {
     private final RenovarTokenUseCase renovarTokenUseCase;
     private final CerrarSesionUseCase cerrarSesionUseCase;
     private final AutenticarConIdentidadExternaUseCase autenticarConIdentidadExternaUseCase;
+    private final SolicitarRecuperacionPasswordUseCase solicitarRecuperacionPasswordUseCase;
+    private final RestablecerPasswordUseCase restablecerPasswordUseCase;
 
     public AuthApiController(
             RegistrarCredencialesUseCase registrarCredencialesUseCase,
             IniciarSesionUseCase iniciarSesionUseCase,
             RenovarTokenUseCase renovarTokenUseCase,
             CerrarSesionUseCase cerrarSesionUseCase,
-            AutenticarConIdentidadExternaUseCase autenticarConIdentidadExternaUseCase
+            AutenticarConIdentidadExternaUseCase autenticarConIdentidadExternaUseCase,
+            SolicitarRecuperacionPasswordUseCase solicitarRecuperacionPasswordUseCase,
+            RestablecerPasswordUseCase restablecerPasswordUseCase
     ) {
         this.registrarCredencialesUseCase = registrarCredencialesUseCase;
         this.iniciarSesionUseCase = iniciarSesionUseCase;
         this.renovarTokenUseCase = renovarTokenUseCase;
         this.cerrarSesionUseCase = cerrarSesionUseCase;
         this.autenticarConIdentidadExternaUseCase = autenticarConIdentidadExternaUseCase;
+        this.solicitarRecuperacionPasswordUseCase = solicitarRecuperacionPasswordUseCase;
+        this.restablecerPasswordUseCase = restablecerPasswordUseCase;
     }
 
     @PostMapping("/credenciales")
@@ -67,6 +78,24 @@ public class AuthApiController {
                 new IniciarSesionCommand(request.emailAcceso, request.passwordPlano)
         );
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/password-reset")
+    public ResponseEntity<RecuperacionPasswordResult> solicitarRecuperacionPassword(
+            @RequestBody SolicitarRecuperacionPasswordRequest request
+    ) {
+        RecuperacionPasswordResult result = solicitarRecuperacionPasswordUseCase.solicitar(
+                new SolicitarRecuperacionPasswordCommand(request.email)
+        );
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<Void> restablecerPassword(@RequestBody RestablecerPasswordRequest request) {
+        restablecerPasswordUseCase.restablecer(
+                new RestablecerPasswordCommand(request.token, request.nuevaPassword)
+        );
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/social/{proveedor}")
@@ -109,6 +138,15 @@ public class AuthApiController {
     public static class IniciarSesionRequest {
         public String emailAcceso;
         public String passwordPlano;
+    }
+
+    public static class SolicitarRecuperacionPasswordRequest {
+        public String email;
+    }
+
+    public static class RestablecerPasswordRequest {
+        public String token;
+        public String nuevaPassword;
     }
 
     public static class RenovarTokenRequest {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { SplashScreen } from "./components/SplashScreen";
 import { AuthScreen } from "./components/AuthScreen";
@@ -10,11 +10,12 @@ import { PublishScreen } from "./components/PublishScreen";
 import { MyPublications } from "./components/MyPublications";
 import { AdminPanelScreen } from "./components/AdminPanelScreen";
 import { PublicProfileScreen } from "./components/PublicProfileScreen";
+import { NotificationsScreen } from "./components/NotificationsScreen";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { BottomNav } from "./components/BottomNav";
 import { RatingModal } from "./components/RatingModal";
 import { NewRequestModal, type NewRequestInitialValues } from "./components/NewRequestModal";
-import { servifyApi, type ApiPublicProvider, type SessionUser } from "./api";
+import { servifyApi, type ApiNotification, type ApiPublicProvider, type SessionUser } from "./api";
 
 type AppScreen =
   | "splash"
@@ -24,13 +25,14 @@ type AppScreen =
   | "requests"
   | "request-detail"
   | "provider-profile"
+  | "notifications"
   | "admin"
   | "my-services"
   | "publish"
   | "profile";
 
 type BottomTab = "explore" | "requests" | "my-services" | "publish" | "profile";
-type ProviderBackScreen = "explore" | "category-publications" | "admin";
+type ProviderBackScreen = "explore" | "category-publications" | "admin" | "requests";
 
 export default function App() {
   const storedSession = servifyApi.getStoredSession();
@@ -46,11 +48,26 @@ export default function App() {
   const [showNewRequest, setShowNewRequest] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [newRequestInitialValues, setNewRequestInitialValues] = useState<NewRequestInitialValues | null>(null);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
 
   const showNav =
     screen !== "splash" && screen !== "auth";
 
   const handleSplashDone = () => setScreen(user ? "explore" : "auth");
+
+  const loadUnreadNotificationCount = useCallback(async () => {
+    if (!user?.id) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+    const notifications = await servifyApi.listNotifications(user.id).catch(() => []);
+    setUnreadNotificationCount(notifications.filter((notification) => !notification.leida).length);
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadUnreadNotificationCount();
+  }, [loadUnreadNotificationCount, screen]);
 
   const handleAuth = (u: SessionUser) => {
     setUser(u);
@@ -87,10 +104,38 @@ export default function App() {
     setScreen("request-detail");
   };
 
+  const handleOpenNotifications = () => {
+    setShowSettings(false);
+    setScreen("notifications");
+  };
+
   const handleProviderPress = (provider: ApiPublicProvider, backScreen: ProviderBackScreen = "explore") => {
     setSelectedProvider(provider);
     setProviderBackScreen(backScreen);
     setScreen("provider-profile");
+  };
+
+  const handleNotificationReference = (notification: ApiNotification) => {
+    const referenceType = (notification.referenciaTipo ?? "").toUpperCase();
+    setPendingRequestId(null);
+    if (referenceType === "PUBLICACION") {
+      setActiveTab("my-services");
+      setScreen("my-services");
+      return;
+    }
+    if (referenceType === "USUARIO") {
+      setActiveTab("profile");
+      setScreen("profile");
+      return;
+    }
+    if (["SOLICITUD", "DISTRIBUCION", "CONTRAOFERTA", "ASIGNACION"].includes(referenceType)) {
+      setPendingRequestId(referenceType === "SOLICITUD" ? notification.referenciaId ?? null : null);
+      setActiveTab("requests");
+      setScreen("requests");
+      return;
+    }
+    setActiveTab("explore");
+    setScreen("explore");
   };
 
   const handleOpenNewRequest = (initialValues?: NewRequestInitialValues) => {
@@ -124,6 +169,8 @@ export default function App() {
           <ExploreScreen
             user={user}
             userName={user?.name ?? "Usuario"}
+            notificationCount={unreadNotificationCount}
+            onOpenNotifications={handleOpenNotifications}
             onCreateRequest={() => handleOpenNewRequest()}
             onCategoryPress={handleCategoryPress}
             onAcceptedRequest={handleRequestPress}
@@ -150,6 +197,8 @@ export default function App() {
             onRequestPress={handleRequestPress}
             onNewRequest={() => handleOpenNewRequest()}
             onRepeatRequest={(request) => handleOpenNewRequest(toNewRequestInitialValues(request))}
+            initialRequestId={pendingRequestId}
+            onInitialRequestOpened={() => setPendingRequestId(null)}
           />
         );
       case "request-detail":
@@ -157,6 +206,7 @@ export default function App() {
           <RequestDetail
             request={selectedRequest}
             currentUser={user}
+            onProviderPress={(provider) => handleProviderPress(provider, "requests")}
             onBack={() => {
               setScreen("requests");
               setActiveTab("requests");
@@ -170,8 +220,17 @@ export default function App() {
             provider={selectedProvider}
             onBack={() => {
               setScreen(providerBackScreen);
-              setActiveTab(providerBackScreen === "admin" ? "profile" : "explore");
+              setActiveTab(providerBackScreen === "admin" ? "profile" : providerBackScreen === "requests" ? "requests" : "explore");
             }}
+          />
+        );
+      case "notifications":
+        return (
+          <NotificationsScreen
+            userId={user?.id}
+            onBack={() => setScreen(screenForTab(activeTab))}
+            onOpenReference={handleNotificationReference}
+            onUnreadCountChange={setUnreadNotificationCount}
           />
         );
       case "admin":
@@ -266,7 +325,7 @@ export default function App() {
               <RatingModal
                 providerName={ratingTarget?.name ?? "Usuario"}
                 onClose={() => setShowRating(false)}
-                onSubmit={async (rating) => {
+                onSubmit={async (rating, comment) => {
                   if (!ratingTarget) return;
                   await servifyApi.rateService({
                     solicitudId: ratingTarget.solicitudId,
@@ -276,8 +335,9 @@ export default function App() {
                     calificadorId: ratingTarget.calificadorId,
                     rolCalificador: ratingTarget.rolCalificador,
                     puntaje: rating,
+                    comentario: comment,
                   });
-                  ratingTarget.onSubmitted?.(rating);
+                  ratingTarget.onSubmitted?.(rating, comment);
                 }}
               />
             </div>
@@ -314,11 +374,21 @@ export default function App() {
             setScreen("admin");
             setActiveTab("profile");
           }}
+          onOpenNotifications={handleOpenNotifications}
+          unreadNotificationCount={unreadNotificationCount}
           onUserUpdated={handleProfileUpdated}
         />
       </div>
     </div>
   );
+}
+
+function screenForTab(tab: BottomTab): AppScreen {
+  if (tab === "requests") return "requests";
+  if (tab === "my-services") return "my-services";
+  if (tab === "publish") return "publish";
+  if (tab === "profile") return "profile";
+  return "explore";
 }
 
 function toNewRequestInitialValues(request: ServiceRequest): NewRequestInitialValues {
