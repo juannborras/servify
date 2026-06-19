@@ -50,6 +50,7 @@ export default function App() {
   const [newRequestInitialValues, setNewRequestInitialValues] = useState<NewRequestInitialValues | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [requestsRefreshKey, setRequestsRefreshKey] = useState(0);
 
   const showNav =
     screen !== "splash" && screen !== "auth";
@@ -172,6 +173,10 @@ export default function App() {
             notificationCount={unreadNotificationCount}
             onOpenNotifications={handleOpenNotifications}
             onCreateRequest={() => handleOpenNewRequest()}
+            onPublishService={() => {
+              setScreen("publish");
+              setActiveTab("publish");
+            }}
             onCategoryPress={handleCategoryPress}
             onAcceptedRequest={handleRequestPress}
             onProviderPress={(provider) => handleProviderPress(provider, "explore")}
@@ -199,6 +204,7 @@ export default function App() {
             onRepeatRequest={(request) => handleOpenNewRequest(toNewRequestInitialValues(request))}
             initialRequestId={pendingRequestId}
             onInitialRequestOpened={() => setPendingRequestId(null)}
+            refreshKey={requestsRefreshKey}
           />
         );
       case "request-detail":
@@ -352,6 +358,7 @@ export default function App() {
                 initialValues={newRequestInitialValues ?? undefined}
                 onClose={() => setShowNewRequest(false)}
                 onCreated={() => {
+                  setRequestsRefreshKey((current) => current + 1);
                   setActiveTab("requests");
                   setScreen("requests");
                   setNewRequestInitialValues(null);
@@ -400,7 +407,7 @@ function toNewRequestInitialValues(request: ServiceRequest): NewRequestInitialVa
   return {
     title,
     description,
-    category: request.category.toLowerCase().startsWith("sin categor") ? undefined : request.category,
+    category: normalizeCategoryName(request.category),
     modality: request.modal,
     location: request.locality ?? request.location,
     price: request.price === "A convenir" ? "" : request.price,
@@ -408,4 +415,29 @@ function toNewRequestInitialValues(request: ServiceRequest): NewRequestInitialVa
     availabilityFrom: request.availabilityFrom,
     availabilityTo: request.availabilityTo,
   };
+}
+
+function normalizeCategoryName(category?: string): string | undefined {
+  const raw = category?.trim();
+  if (!raw || raw.toLowerCase().startsWith("sin categor")) return undefined;
+
+  const key = raw
+    .replace(/tÃ©cnico/gi, "tecnico")
+    .replace(/diseÃ±o/gi, "diseno")
+    .replace(/fotografÃ­a/gi, "fotografia")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u")
+    .replace(/Ã±/g, "n")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+
+  if (key === "soportetecnico") return "Soporte tecnico";
+  if (key === "diseno") return "Diseno";
+  if (key === "fotografia") return "Fotografia";
+  return raw;
 }

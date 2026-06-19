@@ -255,7 +255,7 @@ function toRequestInitialValues(publication: ApiPublication, categoryName: strin
     description: publication.descripcion
       ? `Me interesa solicitar este servicio publicado: ${publication.descripcion}`
       : `Me interesa solicitar el servicio ${title}.`,
-    category: publication.categoriaServicio?.nombre ?? categoryName,
+    category: normalizeCategoryName(publication.categoriaServicio?.nombre ?? categoryName) ?? categoryName,
     modality: fromApiModality(publication.modalidadServicio),
     location: firstPublicationArea(publication),
     price: publication.precioBase ? String(publication.precioBase) : "",
@@ -263,6 +263,31 @@ function toRequestInitialValues(publication: ApiPublication, categoryName: strin
     availabilityFrom: availability?.horaDesde?.slice(0, 5),
     availabilityTo: availability?.horaHasta?.slice(0, 5),
   };
+}
+
+function normalizeCategoryName(category?: string): string | undefined {
+  const raw = category?.trim();
+  if (!raw || raw.toLowerCase().startsWith("sin categor")) return undefined;
+
+  const key = raw
+    .replace(/tÃ©cnico/gi, "tecnico")
+    .replace(/diseÃ±o/gi, "diseno")
+    .replace(/fotografÃ­a/gi, "fotografia")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u")
+    .replace(/Ã±/g, "n")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+
+  if (key === "soportetecnico") return "Soporte tecnico";
+  if (key === "diseno") return "Diseno";
+  if (key === "fotografia") return "Fotografia";
+  return raw;
 }
 
 function formatAreas(publication: ApiPublication) {

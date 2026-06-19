@@ -69,6 +69,7 @@ interface RequestsScreenProps {
   onRepeatRequest: (req: ServiceRequest) => void;
   initialRequestId?: string | null;
   onInitialRequestOpened?: () => void;
+  refreshKey?: number;
 }
 
 export function RequestsScreen({
@@ -78,6 +79,7 @@ export function RequestsScreen({
   onRepeatRequest,
   initialRequestId,
   onInitialRequestOpened,
+  refreshKey = 0,
 }: RequestsScreenProps) {
   const [tab, setTab] = useState<RequestTab>("my-requests");
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
@@ -136,6 +138,9 @@ export function RequestsScreen({
 
   useEffect(() => {
     void loadRequests();
+  }, [loadRequests, refreshKey]);
+
+  useEffect(() => {
     if (!userId) return;
 
     const intervalId = window.setInterval(() => {

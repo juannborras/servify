@@ -685,14 +685,14 @@ export const servifyApi = {
 
   async listCategoryPublications(categoryName: string) {
     const active = await this.listCategories().catch(() => []);
-    const category = active.find((cat) => cat.nombre.toLowerCase() === categoryName.toLowerCase());
+    const category = active.find((cat) => sameCategoryName(cat.nombre, categoryName));
     if (!category) return [];
     return request<ApiPublication[]>(`/categorias/${category.id}/publicaciones`);
   },
 
   async ensureCategory(nombre: string): Promise<ApiCategory> {
     const active = await this.listCategories().catch(() => []);
-    const existing = active.find((cat) => cat.nombre.toLowerCase() === nombre.toLowerCase());
+    const existing = active.find((cat) => sameCategoryName(cat.nombre, nombre));
     if (existing) return existing;
 
     const created = await request<ApiCategory>("/categorias", {
@@ -1159,6 +1159,28 @@ export const servifyApi = {
     });
   },
 };
+
+function sameCategoryName(left: string, right: string): boolean {
+  return normalizeCategoryNameForMatch(left) === normalizeCategoryNameForMatch(right);
+}
+
+function normalizeCategoryNameForMatch(value: string): string {
+  return value
+    .replace(/tÃ©cnico/gi, "tecnico")
+    .replace(/diseÃ±o/gi, "diseno")
+    .replace(/fotografÃ­a/gi, "fotografia")
+    .replace(/categorÃ­a/gi, "categoria")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u")
+    .replace(/Ã±/g, "n")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+}
 
 function getStoredAccessToken(): string {
   if (typeof localStorage === "undefined") return "";

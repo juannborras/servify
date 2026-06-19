@@ -16,7 +16,7 @@ import {
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, servifyApi, type RoleType, type SessionUser } from "../api";
 import servifySymbol from "../../imports/servify-symbol.png";
 
-type AuthTab = "login" | "register" | "forgot" | "reset";
+type AuthTab = "welcome" | "login" | "register" | "forgot" | "reset";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -96,7 +96,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const registerGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const registerCameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [tab, setTab] = useState<AuthTab>("login");
+  const [tab, setTab] = useState<AuthTab>("welcome");
   const [showPass, setShowPass] = useState(false);
   const [showRegisterPass, setShowRegisterPass] = useState(false);
   const [showRegisterConfirmPass, setShowRegisterConfirmPass] = useState(false);
@@ -284,6 +284,23 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     reader.readAsDataURL(file);
   };
 
+  if (tab === "welcome") {
+    return (
+      <WelcomeAuthScreen
+        onRegister={() => {
+          setTab("register");
+          setError("");
+          setRecoveryMessage("");
+        }}
+        onLogin={() => {
+          setTab("login");
+          setError("");
+          setRecoveryMessage("");
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-white">
       <div className="relative flex flex-col items-start pt-10 pb-4 px-6 overflow-hidden" style={{ background: "#ffffff" }}>
@@ -295,37 +312,28 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
           style={{ width: 150, height: 150, right: -30, top: -18, opacity: 0.09, objectFit: "contain" }}
         />
         <div className="flex items-center gap-3 mb-1">
+          <button
+            type="button"
+            onClick={() => {
+              setTab("welcome");
+              setError("");
+              setRecoveryMessage("");
+            }}
+            className="flex items-center justify-center rounded-xl transition-all active:scale-95"
+            style={{ width: 36, height: 36, background: "#f8fafc", border: "1px solid #e2e8f0", color: "#64748b" }}
+            aria-label="Volver al inicio"
+          >
+            <ArrowLeft size={17} strokeWidth={2} />
+          </button>
           <div className="flex items-center justify-center rounded-2xl" style={{ width: 42, height: 42, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
             <img src={servifySymbol} alt="Servify" style={{ width: 30, height: 30, objectFit: "contain" }} />
           </div>
           <span style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>Servify</span>
         </div>
-        <p style={{ fontSize: 13, color: "#64748b", fontWeight: 500, marginLeft: 55 }}>
+        <p style={{ fontSize: 13, color: "#64748b", fontWeight: 500, marginLeft: 91 }}>
           Encontrá el servicio que necesitás
         </p>
 
-        <div className="flex mt-5 rounded-2xl p-1" style={{ background: "#eef2ff", width: "100%" }}>
-          {(["login", "register"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => {
-                setTab(t);
-                setError("");
-                setRecoveryMessage("");
-              }}
-              className="flex-1 py-2 rounded-lg transition-all"
-              style={{
-                background: tab === t ? "white" : "transparent",
-                color: tab === t ? "#2563eb" : "#64748b",
-                fontWeight: 700,
-                fontSize: 14,
-                boxShadow: tab === t ? "0 1px 3px rgba(15,23,42,0.08)" : "none",
-              }}
-            >
-              {t === "login" ? "Iniciar sesion" : "Registrarse"}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pt-6 pb-8">
@@ -401,6 +409,18 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
                 style={{ background: "#2563eb", color: "white", fontWeight: 700, fontSize: 15 }}
               >
                 {loading ? "Conectando..." : "Iniciar sesion"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("register");
+                  setError("");
+                  setRecoveryMessage("");
+                }}
+                className="servify-auth-switch-link self-center transition-all active:scale-95"
+              >
+                No tienes una cuenta? Registrate!
               </button>
             </motion.div>
           ) : tab === "forgot" ? (
@@ -742,6 +762,50 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   );
 }
 
+function WelcomeAuthScreen({ onRegister, onLogin }: { onRegister: () => void; onLogin: () => void }) {
+  return (
+    <div className="servify-auth-welcome flex h-full flex-col items-center justify-between px-7 py-10">
+      <div className="h-8" aria-hidden="true" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        className="flex w-full flex-1 flex-col items-center justify-center text-center"
+      >
+        <div className="servify-auth-mark mb-4">
+          <img src={servifySymbol} alt="Servify" />
+        </div>
+        <h1 className="servify-auth-wordmark">Servify</h1>
+        <p className="servify-auth-tagline">
+          Conectamos habilidades,
+          <br />
+          creando <span>oportunidades.</span>
+        </p>
+
+        <div className="mt-10 flex w-full flex-col gap-3">
+          <button
+            type="button"
+            onClick={onRegister}
+            className="servify-auth-primary-cta w-full rounded-full py-3.5 transition-all active:scale-[0.98]"
+          >
+            Registrarse
+          </button>
+          <button
+            type="button"
+            onClick={onLogin}
+            className="servify-auth-secondary-cta w-full rounded-full py-3.5 transition-all active:scale-[0.98]"
+          >
+            Iniciar sesion
+          </button>
+        </div>
+      </motion.div>
+
+      <p className="servify-auth-footer">Conecta. Crece. Logra mas.</p>
+    </div>
+  );
+}
+
 function GoogleAuthButton({
   text,
   onCredential,
@@ -754,6 +818,7 @@ function GoogleAuthButton({
   const [ready, setReady] = useState(false);
   const [themeVersion, setThemeVersion] = useState(0);
   const buttonRef = useRef<HTMLDivElement | null>(null);
+  const darkMode = isDarkModeEnabled();
 
   useEffect(() => {
     const targets = [document.documentElement, document.body, document.getElementById("root")].filter(
@@ -797,12 +862,13 @@ function GoogleAuthButton({
           Math.min(360, Math.floor(buttonRef.current.getBoundingClientRect().width || 320))
         );
 
+        const renderInDarkMode = isDarkModeEnabled();
         buttonRef.current.innerHTML = "";
         window.google.accounts.id.renderButton(buttonRef.current, {
           type: "standard",
-          theme: isDarkModeEnabled() ? "filled_black" : "outline",
+          theme: renderInDarkMode ? "filled_black" : "outline",
           size: "large",
-          shape: "pill",
+          shape: renderInDarkMode ? "rectangular" : "pill",
           text,
           logo_alignment: "left",
           locale: "es",
@@ -832,8 +898,8 @@ function GoogleAuthButton({
       className="servify-google-auth-shell flex items-center justify-center rounded-2xl overflow-hidden"
       style={{
         minHeight: 44,
-        background: ready ? "transparent" : "rgba(248, 250, 252, 0.88)",
-        border: ready ? "1px solid transparent" : "1.5px solid #e2e8f0",
+        background: ready ? (darkMode ? "#0b1220" : "transparent") : darkMode ? "#0f172a" : "rgba(248, 250, 252, 0.88)",
+        border: ready ? (darkMode ? "1px solid rgba(148, 163, 184, 0.24)" : "1px solid transparent") : darkMode ? "1.5px solid rgba(148, 163, 184, 0.24)" : "1.5px solid #e2e8f0",
       }}
     >
       {!ready && (
@@ -841,7 +907,7 @@ function GoogleAuthButton({
           {GOOGLE_CLIENT_ID ? "Cargando Google..." : "Configurar Google"}
         </span>
       )}
-      <div ref={buttonRef} className="flex w-full justify-center" />
+      <div ref={buttonRef} className="servify-google-auth-frame flex w-full justify-center" />
     </div>
   );
 }

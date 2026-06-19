@@ -1,28 +1,75 @@
-import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronRight, ArrowRight, Bell, RefreshCcw, X, CheckCircle, XCircle, MessageSquare, UserRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Search,
+  ChevronRight,
+  Bell,
+  RefreshCcw,
+  X,
+  CheckCircle,
+  XCircle,
+  MessageSquare,
+  UserRound,
+  Hammer,
+  Laptop,
+  BookOpen,
+  MoreHorizontal,
+  Wrench,
+  Sparkles,
+  Palette,
+  Camera,
+  HeartPulse,
+  Star,
+  BriefcaseBusiness,
+  type LucideIcon,
+} from "lucide-react";
 import { motion } from "motion/react";
-import { servifyApi, type ApiNotification, type ApiPublicProvider, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
+import { servifyApi, type ApiCategory, type ApiNotification, type ApiPublicProvider, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
+import servifySymbol from "../../imports/servify-symbol.png";
 
-const categories = [
-  { id: 1, label: "Oficios", emoji: "🔧", color: "#0891b2", bg: "#f0f9ff" },
-  { id: 2, label: "Clases particulares", emoji: "📚", color: "#7c3aed", bg: "#f5f3ff" },
-  { id: 3, label: "Soporte técnico", emoji: "💻", color: "#2563eb", bg: "#eff6ff" },
-  { id: 4, label: "Limpieza", emoji: "✨", color: "#0891b2", bg: "#ecfeff" },
-  { id: 5, label: "Diseño", emoji: "🎨", color: "#db2777", bg: "#fdf2f8" },
-  { id: 6, label: "Reparaciones", emoji: "🔩", color: "#d97706", bg: "#fffbeb" },
-  { id: 7, label: "Fotografía", emoji: "📷", color: "#16a34a", bg: "#f0fdf4" },
-  { id: 8, label: "Salud y bienestar", emoji: "💚", color: "#059669", bg: "#ecfdf5" },
-  { id: 9, label: "Otro", emoji: "🌟", color: "#7c3aed", bg: "#f5f3ff" },
+type CategoryImageKey = "home" | "trades" | "classes" | "tech" | "cleaning" | "design" | "repair" | "photo" | "wellness" | "other";
+
+type CategoryItem = {
+  id: number;
+  label: string;
+  shortLabel: string;
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+  imageKey: CategoryImageKey;
+};
+
+type ServiceHighlightItem = {
+  title: string;
+  category: string;
+  requestCount: number;
+  imageKey: CategoryImageKey;
+  color: string;
+  isDefault?: boolean;
+};
+
+const categories: CategoryItem[] = [
+  { id: 1, label: "Oficios", shortLabel: "Oficios", icon: Hammer, color: "#0f766e", bg: "#ecfeff", imageKey: "trades" },
+  { id: 2, label: "Clases particulares", shortLabel: "Clases", icon: BookOpen, color: "#7c3aed", bg: "#f5f3ff", imageKey: "classes" },
+  { id: 3, label: "Soporte tecnico", shortLabel: "Tecnologia", icon: Laptop, color: "#2563eb", bg: "#eff6ff", imageKey: "tech" },
+  { id: 4, label: "Limpieza", shortLabel: "Limpieza", icon: Sparkles, color: "#0891b2", bg: "#ecfeff", imageKey: "cleaning" },
+  { id: 5, label: "Diseno", shortLabel: "Diseno", icon: Palette, color: "#db2777", bg: "#fdf2f8", imageKey: "design" },
+  { id: 6, label: "Reparaciones", shortLabel: "Reparar", icon: Wrench, color: "#d97706", bg: "#fffbeb", imageKey: "repair" },
+  { id: 7, label: "Fotografia", shortLabel: "Fotos", icon: Camera, color: "#16a34a", bg: "#f0fdf4", imageKey: "photo" },
+  { id: 8, label: "Salud y bienestar", shortLabel: "Bienestar", icon: HeartPulse, color: "#059669", bg: "#ecfdf5", imageKey: "wellness" },
+  { id: 9, label: "Otro", shortLabel: "Otros", icon: MoreHorizontal, color: "#7c3aed", bg: "#f5f3ff", imageKey: "other" },
 ];
 
-const popularCategories = new Set(["Oficios", "Clases particulares", "Soporte técnico"]);
+const defaultPopularCategoryLabels = ["Oficios", "Clases particulares", "Soporte tecnico"];
+const popularCategories = new Set<string>(defaultPopularCategoryLabels);
+const minimumRequestsForPopular = 3;
 
 interface ExploreScreenProps {
   userName: string;
   notificationCount?: number;
   onOpenNotifications?: () => void;
   onCreateRequest: () => void;
+  onPublishService?: () => void;
   onCategoryPress: (cat: string) => void;
   onAcceptedRequest?: (request: ServiceRequest) => void;
   onProviderPress: (provider: ApiPublicProvider) => void;
@@ -34,6 +81,7 @@ export function ExploreScreen({
   notificationCount = 0,
   onOpenNotifications,
   onCreateRequest,
+  onPublishService,
   onCategoryPress,
   onAcceptedRequest,
   onProviderPress,
@@ -43,6 +91,7 @@ export function ExploreScreen({
   const [ownRequests, setOwnRequests] = useState<ApiRequest[]>([]);
   const [ownAssignmentStates, setOwnAssignmentStates] = useState<Record<string, Awaited<ReturnType<typeof servifyApi.getAssignmentState>> | null>>({});
   const [ownPublications, setOwnPublications] = useState<ApiPublication[]>([]);
+  const [activeCategories, setActiveCategories] = useState<ApiCategory[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<ApiNotification[]>([]);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -56,6 +105,7 @@ export function ExploreScreen({
   const [providersLoading, setProvidersLoading] = useState(false);
   const [providersError, setProvidersError] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const categoriesPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -64,6 +114,7 @@ export function ExploreScreen({
     setOwnRequests([]);
     setOwnAssignmentStates({});
     setOwnPublications([]);
+    setActiveCategories([]);
     setAdminNotifications([]);
     setActivityError("");
 
@@ -78,9 +129,10 @@ export function ExploreScreen({
       shouldLoadProviderData ? servifyApi.listReceivedRequests(String(user.id)).catch(() => []) : Promise.resolve([]),
       servifyApi.listUserRequests(String(user.id)).catch(() => []),
       shouldLoadProviderData ? servifyApi.listUserPublications(String(user.id)).catch(() => []) : Promise.resolve([]),
+      servifyApi.listCategories().catch(() => []),
       servifyApi.listNotifications(String(user.id)).catch(() => []),
     ])
-      .then(async ([received, requests, publications, notifications]) => {
+      .then(async ([received, requests, publications, loadedCategories, notifications]) => {
         if (ignore) return;
         const assignmentEntries = await Promise.all(
           (requests || []).map(async (request) => [
@@ -93,6 +145,7 @@ export function ExploreScreen({
         setOwnRequests(requests || []);
         setOwnAssignmentStates(Object.fromEntries(assignmentEntries));
         setOwnPublications(publications || []);
+        setActiveCategories(loadedCategories || []);
         setAdminNotifications(notifications || []);
       })
       .finally(() => {
@@ -144,6 +197,10 @@ export function ExploreScreen({
   const compatibleRequests = useMemo(
     () => (remoteRequests ?? []).filter(isCompatibleReceived),
     [remoteRequests]
+  );
+  const popularServices = useMemo(
+    () => buildPopularServices([...ownRequests, ...(remoteRequests ?? [])], activeCategories),
+    [activeCategories, ownRequests, remoteRequests]
   );
   const visibleCategories = showAllCategories
     ? categories
@@ -221,39 +278,32 @@ export function ExploreScreen({
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "#f8fafc" }}>
+    <div className="servify-home-shell flex flex-col h-full">
       {/* Header */}
-      <div
-        className="px-5 pt-12 pb-5"
-        style={{ background: "white" }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p style={{ fontSize: 13, color: "#64748b", fontWeight: 500 }}>Hola 👋</p>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
-              ¿Qué necesitás,
-              <br />
-              {firstName}?
-            </h1>
+      <div className="servify-home-header px-5 pt-11 pb-5">
+        <div className="relative mb-5 flex items-center justify-center">
+          <div className="servify-home-brand">
+            <img src={servifySymbol} alt="" aria-hidden="true" />
+            <span>Servify</span>
           </div>
           <button
             type="button"
             onClick={() => onOpenNotifications?.()}
-            className="relative flex items-center justify-center rounded-2xl"
-            style={{ width: 44, height: 44, background: "#f1f5f9" }}
+            className="servify-home-bell absolute right-0 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-2xl transition-all active:scale-95"
+            aria-label="Abrir notificaciones"
           >
-            <Bell size={20} color="#475569" strokeWidth={1.8} />
+            <Bell size={20} strokeWidth={1.8} />
             {notificationCount > 0 ? (
-              <div
-                className="absolute -top-1 -right-1 rounded-full flex items-center justify-center"
-                style={{ minWidth: 18, height: 18, padding: "0 5px", background: "#ef4444", border: "2px solid white" }}
-              >
-                <span style={{ color: "white", fontSize: 10, fontWeight: 800 }}>
-                  {notificationCount > 9 ? "9+" : notificationCount}
-                </span>
-              </div>
+              <span className="servify-home-badge">
+                {notificationCount > 9 ? "9+" : notificationCount}
+              </span>
             ) : null}
           </button>
+        </div>
+
+        <div className="mb-5">
+          <h1 className="servify-home-title">¡Hola, {firstName}!</h1>
+          <p className="servify-home-subtitle">Que necesitas hoy?</p>
         </div>
 
         {activityOpen ? (
@@ -309,18 +359,15 @@ export function ExploreScreen({
         ) : null}
 
         {/* Search */}
-        <div
-          className="flex items-center gap-3 px-4 py-3 rounded-2xl"
-          style={{ background: "#f1f5f9", border: "1.5px solid #e2e8f0" }}
-        >
-          <Search size={18} color="#94a3b8" strokeWidth={1.8} />
+        <div className="servify-home-search flex items-center gap-3 px-4 py-3">
           <input
             value={providerSearch}
             onChange={(e) => setProviderSearch(e.target.value)}
-            placeholder="Buscar prestador por @usuario"
+            placeholder="Buscar prestadores..."
             className="flex-1 bg-transparent outline-none"
-            style={{ fontSize: 14, color: "#0f172a" }}
+            aria-label="Buscar prestadores por nombre de usuario"
           />
+          <Search size={19} strokeWidth={2} />
         </div>
       </div>
 
@@ -334,8 +381,23 @@ export function ExploreScreen({
           onProviderPress={onProviderPress}
         />
 
+        {!providerSearch.trim() && (
+          <QuickCategoryStrip
+            categories={categories.filter((category) => popularCategories.has(category.label))}
+            showAllCategories={showAllCategories}
+            onCategoryPress={onCategoryPress}
+            onToggleAll={() => setShowAllCategories((current) => !current)}
+          />
+        )}
+
+        {!providerSearch.trim() && showAllCategories && (
+          <div ref={categoriesPanelRef}>
+            <AllCategoriesPanel categories={visibleCategories} onCategoryPress={onCategoryPress} />
+          </div>
+        )}
+
         {/* If provider, try to load provider-relevant requests from backend */}
-        {(user?.role === "provider" || user?.role === "both") && remoteRequests && (
+        {!providerSearch.trim() && (user?.role === "provider" || user?.role === "both") && remoteRequests && (
           <div className="mb-3">
             <p style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>Recomendados para vos</p>
             {activityError ? (
@@ -439,99 +501,274 @@ export function ExploreScreen({
             </div>
           </div>
         )}
-        {/* Featured card */}
         {!providerSearch.trim() && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="rounded-3xl overflow-hidden relative"
-            style={{
-              background: "linear-gradient(135deg, #0891b2 0%, #0e7490 50%, #164e63 100%)",
-              minHeight: 150,
-            }}
-          >
-            {/* Decorative circles */}
-            <div
-              className="absolute -top-6 -right-6 rounded-full opacity-20"
-              style={{ width: 120, height: 120, background: "white" }}
-            />
-            <div
-              className="absolute -bottom-8 -left-4 rounded-full opacity-10"
-              style={{ width: 100, height: 100, background: "white" }}
-            />
-
-            <div className="relative p-5">
-              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", fontWeight: 500, marginBottom: 4 }}>
-                ¿Buscás un experto?
-              </p>
-              <h2 style={{ fontSize: 19, fontWeight: 800, color: "white", lineHeight: 1.25, marginBottom: 16 }}>
-                Encontrá el experto{"\n"}que necesitás
-              </h2>
-              <button
-                onClick={onCreateRequest}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all active:scale-95"
-                style={{ background: "white", color: "#0891b2", fontWeight: 700, fontSize: 13 }}
-              >
-                Crear solicitud
-                <ArrowRight size={15} strokeWidth={2.2} />
-              </button>
-            </div>
-          </motion.div>
+          <PopularServicesSection
+            services={popularServices}
+            onCategoryPress={onCategoryPress}
+          />
         )}
 
-        {/* Categories */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-                {showAllCategories ? "Todas las categorias" : "Categorias populares"}
-              </h3>
-              <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
-                {showAllCategories ? `${categories.length} disponibles` : "Las mas solicitadas"}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowAllCategories((current) => !current)}
-              className="servify-action-button px-3 py-2 rounded-xl transition-all active:scale-95"
-              style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 11, fontWeight: 800 }}
-            >
-              {showAllCategories ? "Ver populares" : "Ver todas las categorias"}
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-2.5">
-            {visibleCategories.map((cat, i) => (
-              <motion.button
-                key={cat.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
-                onClick={() => onCategoryPress(cat.label)}
-                className="flex items-center gap-4 p-4 rounded-2xl bg-white text-left transition-all active:scale-[0.98]"
-                style={{ border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
-              >
-                <div
-                  className="flex items-center justify-center rounded-xl"
-                  style={{ width: 46, height: 46, background: cat.bg, flexShrink: 0 }}
-                >
-                  <span style={{ fontSize: 22 }}>{cat.emoji}</span>
-                </div>
-                <div className="flex-1">
-                  <p style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{cat.label}</p>
-                  <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 2, fontWeight: 500 }}>
-                    Ver servicios disponibles
-                  </p>
-                </div>
-                <ChevronRight size={18} color="#cbd5e1" strokeWidth={2} />
-              </motion.button>
-            ))}
-          </div>
-        </div>
+        {!providerSearch.trim() && (
+          <ProviderPromoCard onPublish={onPublishService ?? onCreateRequest} />
+        )}
       </div>
     </div>
   );
+}
+
+function QuickCategoryStrip({
+  categories,
+  showAllCategories,
+  onCategoryPress,
+  onToggleAll,
+}: {
+  categories: CategoryItem[];
+  showAllCategories: boolean;
+  onCategoryPress: (category: string) => void;
+  onToggleAll: () => void;
+}) {
+  return (
+    <section className="servify-home-section">
+      <div className="servify-quick-categories">
+        {categories.slice(0, 3).map((category, index) => {
+          const Icon = category.icon;
+          return (
+            <motion.button
+              key={category.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, delay: index * 0.04 }}
+              type="button"
+              onClick={() => onCategoryPress(category.label)}
+              className="servify-quick-category transition-all active:scale-95"
+            >
+              <span
+                className="servify-category-symbol servify-quick-category-symbol"
+                style={{ color: category.color, background: category.bg, borderColor: `${category.color}28` }}
+              >
+                <Icon size={24} strokeWidth={2.15} />
+              </span>
+              <span>{category.shortLabel}</span>
+            </motion.button>
+          );
+        })}
+
+        <motion.button
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, delay: 0.12 }}
+          type="button"
+          onClick={onToggleAll}
+          className="servify-quick-category transition-all active:scale-95"
+          aria-expanded={showAllCategories}
+        >
+          <span className="servify-category-symbol servify-quick-category-symbol servify-quick-category-more">
+            <MoreHorizontal size={23} strokeWidth={2.3} />
+          </span>
+          <span>Mas</span>
+        </motion.button>
+      </div>
+    </section>
+  );
+}
+
+function PopularServicesSection({
+  services,
+  onCategoryPress,
+}: {
+  services: ServiceHighlightItem[];
+  onCategoryPress: (category: string) => void;
+}) {
+  const usingDefaults = services.every((service) => service.isDefault);
+
+  return (
+    <section className="servify-home-section">
+      <div className="servify-section-heading">
+        <h2>Servicios populares</h2>
+        <span>{usingDefaults ? "Sugeridos" : "Por solicitudes"}</span>
+      </div>
+
+      {services.length === 0 ? (
+        <p className="servify-popular-empty">
+          Aun estamos preparando recomendaciones.
+        </p>
+      ) : (
+      <div className="servify-popular-services">
+        {services.map((service, index) => (
+            <motion.button
+              key={service.title}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.05 }}
+              type="button"
+              onClick={() => onCategoryPress(service.category)}
+              className="servify-service-card transition-all active:scale-[0.98]"
+            >
+              <span className={`servify-service-visual servify-category-photo-${service.imageKey}`}>
+                <span className="servify-category-photo-shade" aria-hidden="true" />
+              </span>
+              <span className="servify-service-title">{service.title}</span>
+              <span className="servify-service-price">
+                {service.isDefault
+                  ? "Categoria sugerida"
+                  : `${service.requestCount} solicitud${service.requestCount === 1 ? "" : "es"}`}
+              </span>
+              <span className="servify-service-rating">
+                <Star size={12} fill="currentColor" strokeWidth={0} />
+                {service.isDefault ? "Sugerido" : "Popular"}
+              </span>
+            </motion.button>
+        ))}
+      </div>
+      )}
+    </section>
+  );
+}
+
+function ProviderPromoCard({ onPublish }: { onPublish: () => void }) {
+  return (
+    <section className="servify-provider-promo">
+      <div className="servify-provider-promo-icon">
+        <BriefcaseBusiness size={22} strokeWidth={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2>¿Sos prestador de servicios?</h2>
+        <p>Ofrecé tus habilidades y generá ingresos de forma flexible.</p>
+      </div>
+      <button type="button" onClick={onPublish} className="servify-provider-promo-button transition-all active:scale-95">
+        Publicar
+      </button>
+    </section>
+  );
+}
+
+function AllCategoriesPanel({
+  categories,
+  onCategoryPress,
+}: {
+  categories: CategoryItem[];
+  onCategoryPress: (category: string) => void;
+}) {
+  return (
+    <section className="servify-all-categories">
+      <div className="servify-section-heading">
+        <h2>Todas las categorias</h2>
+        <span>{categories.length} disponibles</span>
+      </div>
+      <div className="servify-all-categories-grid">
+        {categories.map((category, index) => {
+          const Icon = category.icon;
+          return (
+            <motion.button
+              key={category.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, delay: Math.min(index * 0.025, 0.16) }}
+              type="button"
+              onClick={() => onCategoryPress(category.label)}
+              className="servify-all-category-item transition-all active:scale-[0.98]"
+            >
+              <span
+                className="servify-category-symbol servify-all-category-symbol"
+                style={{ color: category.color, background: category.bg, borderColor: `${category.color}28` }}
+              >
+                <Icon size={22} strokeWidth={2.15} />
+              </span>
+              <strong>{category.shortLabel}</strong>
+            </motion.button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function buildPopularServices(requests: ApiRequest[], activeCategories: ApiCategory[]): ServiceHighlightItem[] {
+  const categoryNameById = new Map(activeCategories.map((category) => [category.id, category.nombre]));
+  const fallbackCategory = categories.find((category) => category.label === "Otro") ?? categories[0];
+  const counters = new Map<string, { category: CategoryItem; count: number }>();
+
+  requests.forEach((request) => {
+    const rawCategoryName = request.categoriaServicioId ? categoryNameById.get(request.categoriaServicioId) : undefined;
+    const category = findCategoryByName(rawCategoryName) ?? fallbackCategory;
+    const current = counters.get(category.label);
+    counters.set(category.label, {
+      category,
+      count: (current?.count ?? 0) + 1,
+    });
+  });
+
+  const rankedServices = Array.from(counters.values())
+    .sort((a, b) => b.count - a.count || a.category.label.localeCompare(b.category.label))
+    .map(({ category, count }) => ({
+      title: category.label,
+      category: category.label,
+      requestCount: count,
+      imageKey: category.imageKey,
+      color: category.color,
+    }));
+
+  const totalRequests = rankedServices.reduce((total, service) => total + service.requestCount, 0);
+  if (totalRequests < minimumRequestsForPopular) {
+    return buildDefaultPopularServices();
+  }
+
+  const topServices = rankedServices.slice(0, 3);
+  if (topServices.length >= 3) {
+    return topServices;
+  }
+
+  const usedCategories = new Set(topServices.map((service) => service.category));
+  return [
+    ...topServices,
+    ...buildDefaultPopularServices(usedCategories, 3 - topServices.length),
+  ];
+}
+
+function buildDefaultPopularServices(excludedCategories = new Set<string>(), limit = 3): ServiceHighlightItem[] {
+  const seen = new Set<string>();
+  const defaultCategories = [
+    ...defaultPopularCategoryLabels.map((label) => findCategoryByName(label)),
+    ...categories,
+  ].filter((category): category is CategoryItem => {
+    if (!category || seen.has(category.label) || excludedCategories.has(category.label)) {
+      return false;
+    }
+    seen.add(category.label);
+    return true;
+  });
+
+  return defaultCategories.slice(0, limit).map((category) => ({
+    title: category.label,
+    category: category.label,
+    requestCount: 0,
+    imageKey: category.imageKey,
+    color: category.color,
+    isDefault: true,
+  }));
+}
+
+function findCategoryByName(name?: string): CategoryItem | undefined {
+  const key = normalizeCategoryKey(name);
+  if (!key) return undefined;
+  return categories.find((category) => normalizeCategoryKey(category.label) === key);
+}
+
+function normalizeCategoryKey(value?: string): string {
+  return (value ?? "")
+    .replace(/tÃ©cnico/gi, "tecnico")
+    .replace(/diseÃ±o/gi, "diseno")
+    .replace(/fotografÃ­a/gi, "fotografia")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u")
+    .replace(/Ã±/g, "n")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
 }
 
 type ActivityTone = "urgent" | "info" | "success" | "neutral";

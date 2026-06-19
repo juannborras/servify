@@ -4,8 +4,8 @@ import { FileText, AlignLeft, MapPin, DollarSign, Clock, CheckCircle } from "luc
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, servifyApi } from "../api";
 
 const categories = [
-  "Oficios", "Clases particulares", "Soporte técnico", "Limpieza",
-  "Diseño", "Reparaciones", "Fotografía", "Salud y bienestar", "Otro",
+  "Oficios", "Clases particulares", "Soporte tecnico", "Limpieza",
+  "Diseno", "Reparaciones", "Fotografia", "Salud y bienestar", "Otro",
 ];
 const modalities = ["Presencial", "Virtual", "Ambas"];
 const PUBLISH_DRAFT_PREFIX = "servify.publish-draft.";
