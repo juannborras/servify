@@ -1,6 +1,6 @@
 import { Compass, FileText, Briefcase, PlusSquare, User } from "lucide-react";
 
-type Tab = "explore" | "requests" | "my-services" | "publish" | "profile";
+type Tab = "explore" | "requests" | "create-request" | "my-services" | "publish" | "profile";
 
 interface BottomNavProps {
   activeTab: Tab;
@@ -10,7 +10,7 @@ interface BottomNavProps {
 const tabs = [
   { id: "explore" as Tab, label: "Explorar", icon: Compass },
   { id: "requests" as Tab, label: "Solicitudes", icon: FileText },
-  { id: "publish" as Tab, label: "Publicar", icon: PlusSquare },
+  { id: "create-request" as Tab, label: "Solicitar", icon: PlusSquare },
   { id: "my-services" as Tab, label: "Mis servicios", icon: Briefcase },
   { id: "profile" as Tab, label: "Perfil", icon: User },
 ];
@@ -20,7 +20,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     <div className="flex items-center justify-around bg-white border-t border-gray-100 px-2 py-2 safe-area-bottom">
       {tabs.map(({ id, label, icon: Icon }) => {
         const active = activeTab === id;
-        const primary = id === "publish";
+        const primary = id === "create-request";
         return (
           <button
             key={id}

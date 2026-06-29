@@ -752,9 +752,15 @@ public class MvpUseCaseConfiguration {
 
     @Bean
     NotificadorEventosSolicitudService notificadorEventosSolicitudService(
-            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase
+            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase,
+            UsuarioRepositoryPort usuarioRepositoryPort,
+            PerfilUsuarioRepositoryPort perfilUsuarioRepositoryPort
     ) {
-        return new NotificadorEventosSolicitudService(crearNotificacionUsuarioUseCase);
+        return new NotificadorEventosSolicitudService(
+                crearNotificacionUsuarioUseCase,
+                usuarioRepositoryPort,
+                perfilUsuarioRepositoryPort
+        );
     }
 
     @Bean

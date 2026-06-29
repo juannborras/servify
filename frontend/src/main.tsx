@@ -17,6 +17,7 @@ createRoot(document.getElementById("root")!).render(<App />);
 
 function installMobileViewportLock() {
   let lastTouchEnd = 0;
+  document.documentElement.style.setProperty("-webkit-text-size-adjust", "100%");
 
   document.addEventListener(
     "gesturestart",
@@ -44,6 +45,26 @@ function installMobileViewportLock() {
         event.preventDefault();
       }
       lastTouchEnd = now;
+    },
+    { passive: false }
+  );
+
+  document.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey) {
+        event.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if ((event.ctrlKey || event.metaKey) && ["+", "-", "="].includes(event.key)) {
+        event.preventDefault();
+      }
     },
     { passive: false }
   );

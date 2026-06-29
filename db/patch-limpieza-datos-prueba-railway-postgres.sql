@@ -1,4 +1,8 @@
--- Limpieza de datos operativos de pruebas en Railway.
+-- Patch manual para Railway/PostgreSQL.
+--
+-- Limpieza historica de datos operativos de prueba.
+-- No debe vivir en src/main/resources/db/migration porque Flyway ejecuta
+-- automaticamente las migraciones pendientes al arrancar la aplicacion.
 --
 -- Conserva:
 -- - usuarios, credenciales e identidades externas;

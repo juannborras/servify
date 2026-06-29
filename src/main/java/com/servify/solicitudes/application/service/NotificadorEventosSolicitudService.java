@@ -10,6 +10,10 @@ import com.servify.solicitudes.domain.model.AsignacionServicio;
 import com.servify.solicitudes.domain.model.Contraoferta;
 import com.servify.solicitudes.domain.model.DistribucionSolicitud;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
+import com.servify.usuarios.application.port.out.PerfilUsuarioRepositoryPort;
+import com.servify.usuarios.application.port.out.UsuarioRepositoryPort;
+import com.servify.usuarios.domain.model.PerfilUsuario;
+import com.servify.usuarios.domain.model.Usuario;
 
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
@@ -21,9 +25,21 @@ public class NotificadorEventosSolicitudService {
     private static final DateTimeFormatter FECHA_NOTIFICACION = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase;
+    private final UsuarioRepositoryPort usuarioRepositoryPort;
+    private final PerfilUsuarioRepositoryPort perfilUsuarioRepositoryPort;
 
     public NotificadorEventosSolicitudService(CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase) {
+        this(crearNotificacionUsuarioUseCase, null, null);
+    }
+
+    public NotificadorEventosSolicitudService(
+            CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase,
+            UsuarioRepositoryPort usuarioRepositoryPort,
+            PerfilUsuarioRepositoryPort perfilUsuarioRepositoryPort
+    ) {
         this.crearNotificacionUsuarioUseCase = crearNotificacionUsuarioUseCase;
+        this.usuarioRepositoryPort = usuarioRepositoryPort;
+        this.perfilUsuarioRepositoryPort = perfilUsuarioRepositoryPort;
     }
 
     public void nuevaSolicitudCompatible(SolicitudServicio solicitud, List<DistribucionSolicitud> distribuciones) {
@@ -42,12 +58,13 @@ public class NotificadorEventosSolicitudService {
 
     public void respuestaPrestador(SolicitudServicio solicitud, DistribucionSolicitud distribucion, TipoRespuestaDistribucion respuesta) {
         if (solicitud == null || distribucion == null || respuesta == null) return;
+        String prestador = nombreUsuario(distribucion.getPrestadorId());
         String accion = respuesta == TipoRespuestaDistribucion.ACEPTAR ? "acepto" : "rechazo";
         crear(
                 solicitud.getSolicitanteId(),
                 TipoNotificacion.SOLICITUD_RESPONDIDA,
-                respuesta == TipoRespuestaDistribucion.ACEPTAR ? "Un prestador acepto tu solicitud" : "Un prestador rechazo tu solicitud",
-                resumenSolicitud("Un prestador " + accion + " tu solicitud.", solicitud),
+                respuesta == TipoRespuestaDistribucion.ACEPTAR ? prestador + " acepto tu solicitud" : prestador + " rechazo tu solicitud",
+                resumenSolicitud(prestador + " " + accion + " tu solicitud.", solicitud),
                 "SOLICITUD",
                 solicitud.getId()
         );
@@ -59,7 +76,7 @@ public class NotificadorEventosSolicitudService {
                 solicitud.getSolicitanteId(),
                 TipoNotificacion.CONTRAOFERTA_RECIBIDA,
                 "Recibiste una contraoferta",
-                resumenSolicitud("Contraoferta " + precio(contraoferta.getPrecioPropuesto()) + comentario(contraoferta.getMensaje()), solicitud),
+                resumenSolicitud("Contraoferta de " + nombreUsuario(contraoferta.getPrestadorId()) + " " + precio(contraoferta.getPrecioPropuesto()) + comentario(contraoferta.getMensaje()), solicitud),
                 "SOLICITUD",
                 solicitud.getId()
         );
@@ -73,8 +90,8 @@ public class NotificadorEventosSolicitudService {
                 TipoNotificacion.CONTRAOFERTA_RESUELTA,
                 aceptada ? "Tu contraoferta fue aceptada" : "Tu contraoferta fue rechazada",
                 resumenSolicitud(aceptada
-                        ? "Contraoferta aceptada " + precio(contraoferta.getPrecioPropuesto()) + "."
-                        : "Contraoferta rechazada. El solicitante seguira buscando.", solicitud),
+                        ? nombreUsuario(solicitud.getSolicitanteId()) + " acepto tu contraoferta " + precio(contraoferta.getPrecioPropuesto()) + "."
+                        : nombreUsuario(solicitud.getSolicitanteId()) + " rechazo tu contraoferta y seguira buscando.", solicitud),
                 "SOLICITUD",
                 solicitud.getId()
         );
@@ -86,7 +103,7 @@ public class NotificadorEventosSolicitudService {
                 asignacion.getPrestadorId(),
                 TipoNotificacion.SERVICIO_ASIGNADO,
                 "Servicio asignado",
-                resumenSolicitud("El solicitante confirmo tu propuesta. El servicio quedo asignado.", solicitud),
+                resumenSolicitud(nombreUsuario(solicitud.getSolicitanteId()) + " confirmo tu propuesta. El servicio quedo asignado.", solicitud),
                 "SOLICITUD",
                 solicitud.getId()
         );
@@ -102,7 +119,7 @@ public class NotificadorEventosSolicitudService {
                         prestadorId,
                         TipoNotificacion.SOLICITUD_CANCELADA,
                         "Solicitud cancelada",
-                        resumenSolicitud("El solicitante cancelo una solicitud que tenias asociada.", solicitud),
+                        resumenSolicitud(nombreUsuario(solicitud.getSolicitanteId()) + " cancelo una solicitud que tenias asociada.", solicitud),
                         "SOLICITUD",
                         solicitud.getId()
                 ));
@@ -113,11 +130,14 @@ public class NotificadorEventosSolicitudService {
         UUID destinatario = rolConfirmante == RolConfirmante.SOLICITANTE
                 ? asignacion.getPrestadorId()
                 : solicitud.getSolicitanteId();
+        UUID confirmante = rolConfirmante == RolConfirmante.SOLICITANTE
+                ? solicitud.getSolicitanteId()
+                : asignacion.getPrestadorId();
         crear(
                 destinatario,
                 TipoNotificacion.SERVICIO_FINALIZACION,
                 "Confirmacion de finalizacion",
-                resumenSolicitud("La otra parte confirmo la finalizacion del servicio.", solicitud),
+                resumenSolicitud(nombreUsuario(confirmante) + " confirmo la finalizacion del servicio.", solicitud),
                 "SOLICITUD",
                 solicitud.getId()
         );
@@ -187,7 +207,7 @@ public class NotificadorEventosSolicitudService {
         }
         return prefijo + " Servicio: " + servicio
                 + ". Fecha: " + fecha(solicitud)
-                + ". Solicitante: " + shortId(solicitud.getSolicitanteId()) + ".";
+                + ". Solicitante: " + nombreUsuario(solicitud.getSolicitanteId()) + ".";
     }
 
     private String fecha(SolicitudServicio solicitud) {
@@ -203,6 +223,44 @@ public class NotificadorEventosSolicitudService {
         }
         String value = id.toString();
         return value.length() <= 8 ? value : value.substring(0, 8);
+    }
+
+    private String nombreUsuario(UUID usuarioId) {
+        if (usuarioId == null) {
+            return "sin dato";
+        }
+
+        String nombrePerfil = nombrePerfil(usuarioId);
+        if (nombrePerfil != null && !nombrePerfil.isBlank()) {
+            return nombrePerfil;
+        }
+
+        if (usuarioRepositoryPort != null) {
+            return usuarioRepositoryPort.buscarPorId(usuarioId)
+                    .map(Usuario::getNombreUsuario)
+                    .filter(nombre -> nombre != null && !nombre.isBlank())
+                    .orElse(shortId(usuarioId));
+        }
+
+        return shortId(usuarioId);
+    }
+
+    private String nombrePerfil(UUID usuarioId) {
+        if (perfilUsuarioRepositoryPort == null) {
+            return null;
+        }
+
+        return perfilUsuarioRepositoryPort.buscarPorUsuarioId(usuarioId)
+                .map(this::nombreMostrar)
+                .filter(nombre -> nombre != null && !nombre.isBlank())
+                .orElse(null);
+    }
+
+    private String nombreMostrar(PerfilUsuario perfilUsuario) {
+        if (perfilUsuario == null || perfilUsuario.getNombreCompleto() == null) {
+            return null;
+        }
+        return perfilUsuario.getNombreCompleto().nombreMostrar().trim();
     }
 
     private String precio(BigDecimal value) {

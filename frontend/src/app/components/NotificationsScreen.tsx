@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Bell, CheckCircle2, ChevronRight, RefreshCcw, ShieldAlert, X } from "lucide-react";
 import { motion } from "motion/react";
 import { servifyApi, type ApiNotification } from "../api";
+import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
 
 interface NotificationsScreenProps {
   userId?: string;
@@ -40,6 +41,13 @@ export function NotificationsScreen({
       setLoading(false);
     }
   };
+
+  const { pullDistance, refreshing, pullHandlers } = usePullToRefresh(
+    async () => {
+      await loadNotifications();
+    },
+    Boolean(userId)
+  );
 
   useEffect(() => {
     void loadNotifications();
@@ -169,7 +177,8 @@ export function NotificationsScreen({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-7 pt-4">
+      <div className="flex-1 overflow-y-auto px-5 pb-7 pt-4" {...pullHandlers}>
+        <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         {error ? (
           <p className="mb-3 rounded-2xl px-4 py-3" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 13, fontWeight: 800 }}>
             {error}

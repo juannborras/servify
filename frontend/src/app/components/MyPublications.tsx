@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Plus,
   MapPin,
@@ -24,6 +24,7 @@ import {
   type ApiAvailability,
   type ApiPublication,
 } from "../api";
+import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
 
 const categories = [
   "Oficios", "Clases particulares", "Soporte tÃ©cnico", "Limpieza",
@@ -71,21 +72,22 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadPublications = useCallback(async () => {
     if (!userId) return;
-    let ignore = false;
-    servifyApi
-      .listUserPublications(userId)
-      .then((items) => {
-        if (!ignore) setPubs(items.filter((item) => !isDeleted(item.estado)).map(mapPublication));
-      })
-      .catch((err) => {
-        if (!ignore) setError(err instanceof Error ? err.message : "No se pudieron cargar las publicaciones");
-      });
-    return () => {
-      ignore = true;
-    };
+    setError("");
+    try {
+      const items = await servifyApi.listUserPublications(userId);
+      setPubs(items.filter((item) => !isDeleted(item.estado)).map(mapPublication));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron cargar las publicaciones");
+    }
   }, [userId]);
+
+  useEffect(() => {
+    void loadPublications();
+  }, [loadPublications]);
+
+  const { pullDistance, refreshing, pullHandlers } = usePullToRefresh(loadPublications, Boolean(userId));
 
   const toggleActive = async (id: number | string) => {
     const current = pubs.find((p) => p.id === id);
@@ -193,7 +195,8 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-4" {...pullHandlers}>
+        <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         {error && (
           <p className="rounded-2xl px-4 py-3" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>
             {error}

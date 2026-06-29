@@ -31,7 +31,7 @@ type AppScreen =
   | "publish"
   | "profile";
 
-type BottomTab = "explore" | "requests" | "my-services" | "publish" | "profile";
+type BottomTab = "explore" | "requests" | "create-request" | "my-services" | "publish" | "profile";
 type ProviderBackScreen = "explore" | "category-publications" | "admin" | "requests";
 
 export default function App() {
@@ -92,6 +92,10 @@ export default function App() {
   };
 
   const handleTabChange = (tab: BottomTab) => {
+    if (tab === "create-request") {
+      handleOpenNewRequest();
+      return;
+    }
     setActiveTab(tab);
     if (tab === "explore") setScreen("explore");
     else if (tab === "requests") setScreen("requests");
@@ -392,6 +396,7 @@ export default function App() {
 
 function screenForTab(tab: BottomTab): AppScreen {
   if (tab === "requests") return "requests";
+  if (tab === "create-request") return "requests";
   if (tab === "my-services") return "my-services";
   if (tab === "publish") return "publish";
   if (tab === "profile") return "profile";

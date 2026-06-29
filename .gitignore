@@ -39,3 +39,6 @@ dist/
 .env.local
 *.log
 .env
+
+### obsidian ###
+.obsidian/

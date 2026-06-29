@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   ChevronRight,
@@ -25,6 +25,7 @@ import {
 import { motion } from "motion/react";
 import { servifyApi, type ApiCategory, type ApiNotification, type ApiPublicProvider, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
+import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
 import servifySymbol from "../../imports/servify-symbol.png";
 
 type CategoryImageKey = "home" | "trades" | "classes" | "tech" | "cleaning" | "design" | "repair" | "photo" | "wellness" | "other";
@@ -107,8 +108,7 @@ export function ExploreScreen({
   const [showAllCategories, setShowAllCategories] = useState(false);
   const categoriesPanelRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
+  const loadHomeData = useCallback(async (isCancelled: () => boolean = () => false) => {
     setActivityLoading(Boolean(user));
     setRemoteRequests(null);
     setOwnRequests([]);
@@ -125,37 +125,43 @@ export function ExploreScreen({
 
     const shouldLoadProviderData = user.role === "provider" || user.role === "both";
 
-    Promise.all([
-      shouldLoadProviderData ? servifyApi.listReceivedRequests(String(user.id)).catch(() => []) : Promise.resolve([]),
-      servifyApi.listUserRequests(String(user.id)).catch(() => []),
-      shouldLoadProviderData ? servifyApi.listUserPublications(String(user.id)).catch(() => []) : Promise.resolve([]),
-      servifyApi.listCategories().catch(() => []),
-      servifyApi.listNotifications(String(user.id)).catch(() => []),
-    ])
-      .then(async ([received, requests, publications, loadedCategories, notifications]) => {
-        if (ignore) return;
-        const assignmentEntries = await Promise.all(
-          (requests || []).map(async (request) => [
-            request.id,
-            await servifyApi.getAssignmentState(request.id).catch(() => null),
-          ] as const)
-        );
-        if (ignore) return;
-        setRemoteRequests(received || []);
-        setOwnRequests(requests || []);
-        setOwnAssignmentStates(Object.fromEntries(assignmentEntries));
-        setOwnPublications(publications || []);
-        setActiveCategories(loadedCategories || []);
-        setAdminNotifications(notifications || []);
-      })
-      .finally(() => {
-        if (!ignore) setActivityLoading(false);
-      });
+    try {
+      const [received, requests, publications, loadedCategories, notifications] = await Promise.all([
+        shouldLoadProviderData ? servifyApi.listReceivedRequests(String(user.id)).catch(() => []) : Promise.resolve([]),
+        servifyApi.listUserRequests(String(user.id)).catch(() => []),
+        shouldLoadProviderData ? servifyApi.listUserPublications(String(user.id)).catch(() => []) : Promise.resolve([]),
+        servifyApi.listCategories().catch(() => []),
+        servifyApi.listNotifications(String(user.id)).catch(() => []),
+      ]);
+
+      if (isCancelled()) return;
+      const assignmentEntries = await Promise.all(
+        (requests || []).map(async (request) => [
+          request.id,
+          await servifyApi.getAssignmentState(request.id).catch(() => null),
+        ] as const)
+      );
+      if (isCancelled()) return;
+
+      setRemoteRequests(received || []);
+      setOwnRequests(requests || []);
+      setOwnAssignmentStates(Object.fromEntries(assignmentEntries));
+      setOwnPublications(publications || []);
+      setActiveCategories(loadedCategories || []);
+      setAdminNotifications(notifications || []);
+    } finally {
+      if (!isCancelled()) setActivityLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    let ignore = false;
+    void loadHomeData(() => ignore);
 
     return () => {
       ignore = true;
     };
-  }, [user]);
+  }, [loadHomeData]);
 
   useEffect(() => {
     let ignore = false;
@@ -205,6 +211,8 @@ export function ExploreScreen({
   const visibleCategories = showAllCategories
     ? categories
     : categories.filter((category) => popularCategories.has(category.label));
+
+  const { pullDistance, refreshing, pullHandlers } = usePullToRefresh(loadHomeData, Boolean(user));
 
   const reloadReceivedRequests = async () => {
     if (!user || !(user.role === "provider" || user.role === "both")) return;
@@ -372,7 +380,8 @@ export function ExploreScreen({
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-5" {...pullHandlers}>
+        <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         <ProviderSearchSection
           search={providerSearch}
           providers={providers}

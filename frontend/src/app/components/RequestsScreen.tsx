@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, MapPin, Users, DollarSign, Clock, CheckCircle, XCircle, MessageSquare, Edit2, Trash2, Ban, X, Save, RefreshCcw } from "lucide-react";
 import { motion } from "motion/react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiCategory, type ApiReceivedRequest, type ApiRequest, type ApiUserProfile } from "../api";
+import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
 
 type RequestTab = "my-requests" | "my-proposals";
 type TimeFilter = "active" | "30" | "90" | "all";
@@ -19,7 +20,7 @@ export interface ServiceRequest {
   schedule: string;
   date: string;
   rawDate?: string;
-  status: "open" | "completed" | "cancelled" | "in-progress" | "counter-offer";
+  status: "open" | "completed" | "cancelled" | "in-progress" | "counter-offer" | "pending-acceptance";
   requesterName: string;
   requesterInitials: string;
   providerName?: string;
@@ -45,6 +46,11 @@ type EditRequestForm = {
   availabilityTo: string;
 };
 
+type RequestActionConfirmation = {
+  request: ServiceRequest;
+  action: "cancel" | "hide";
+};
+
 // Demo placeholders removed to avoid showing fake proposals to external users.
 
 const statusConfig = {
@@ -52,14 +58,15 @@ const statusConfig = {
   completed: { label: "Completada", bg: "#f0fdf4", color: "#16a34a" },
   cancelled: { label: "Cancelada", bg: "#fef2f2", color: "#ef4444" },
   "in-progress": { label: "En curso", bg: "#fffbeb", color: "#d97706" },
+  "pending-acceptance": { label: "Pendiente de aceptacion", bg: "#ecfeff", color: "#0891b2" },
   "counter-offer": { label: "Contraoferta", bg: "#fff7ed", color: "#ea580c" },
 };
 
 const timeFilterOptions: { id: TimeFilter; label: string }[] = [
+  { id: "all", label: "Todas" },
   { id: "active", label: "Activas" },
   { id: "30", label: "30 dias" },
   { id: "90", label: "90 dias" },
-  { id: "all", label: "Todas" },
 ];
 
 interface RequestsScreenProps {
@@ -84,14 +91,20 @@ export function RequestsScreen({
   const [tab, setTab] = useState<RequestTab>("my-requests");
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
   const [apiReceived, setApiReceived] = useState<ServiceRequest[]>([]);
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("active");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   const [actionLoading, setActionLoading] = useState("");
   const [counterOfferFor, setCounterOfferFor] = useState<string | null>(null);
   const [counterPrice, setCounterPrice] = useState("");
   const [counterMessage, setCounterMessage] = useState("");
   const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
   const [editForm, setEditForm] = useState<EditRequestForm>(() => emptyEditForm());
+  const [confirmation, setConfirmation] = useState<RequestActionConfirmation | null>(null);
+  const [hiddenRequestIds, setHiddenRequestIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setHiddenRequestIds(readHiddenRequestIds(userId));
+  }, [userId]);
 
   const loadRequests = useCallback(() => {
     if (!userId) return;
@@ -158,8 +171,20 @@ export function RequestsScreen({
   ];
 
   const data = useMemo(
-    () => filterRequestsByTime(sortRequestsForDisplay(tab === "my-requests" ? apiRequests : apiReceived), timeFilter),
-    [apiRequests, apiReceived, tab, timeFilter]
+    () => {
+      const source = tab === "my-requests"
+        ? apiRequests.filter((req) => !hiddenRequestIds.has(String(req.id)))
+        : apiReceived;
+      return filterRequestsByTime(sortRequestsForDisplay(source), timeFilter);
+    },
+    [apiRequests, apiReceived, hiddenRequestIds, tab, timeFilter]
+  );
+
+  const { pullDistance, refreshing, pullHandlers } = usePullToRefresh(
+    async () => {
+      await loadRequests();
+    },
+    Boolean(userId)
   );
 
   useEffect(() => {
@@ -186,7 +211,7 @@ export function RequestsScreen({
       });
       await loadRequests();
       if (tipoRespuesta === "ACEPTAR") {
-        onRequestPress({ ...req, rawStatus: "ACEPTADA", status: "in-progress", providerId: userId });
+        onRequestPress({ ...req, rawStatus: "ACEPTADA", status: "pending-acceptance", providerId: userId });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo responder la solicitud");
@@ -290,26 +315,39 @@ export function RequestsScreen({
     }
   };
 
-  const handleCancelRequest = async (req: ServiceRequest, removeFromList: boolean) => {
+  const requestCancelRequest = (req: ServiceRequest) => {
+    setConfirmation({ request: req, action: "cancel" });
+  };
+
+  const requestHideCompletedRequest = (req: ServiceRequest) => {
+    setConfirmation({ request: req, action: "hide" });
+  };
+
+  const handleConfirmedRequestAction = async () => {
+    if (!confirmation) return;
+    const { request: req, action } = confirmation;
     if (!userId) {
       setError("No se pudo identificar el usuario actual.");
       return;
     }
-    const message = removeFromList
-      ? "Eliminar esta solicitud la cancela en el backend y la quita de esta lista."
-      : "Cancelar esta solicitud la marca como cancelada en el backend.";
-    if (!window.confirm(message)) return;
+
+    if (action === "hide") {
+      hideCompletedRequest(userId, String(req.id));
+      setHiddenRequestIds((current) => {
+        const next = new Set(current);
+        next.add(String(req.id));
+        return next;
+      });
+      setConfirmation(null);
+      return;
+    }
 
     setError("");
-    setActionLoading(`${req.id}-${removeFromList ? "DELETE" : "CANCEL"}`);
+    setActionLoading(`${req.id}-CANCEL`);
     try {
-      if (removeFromList) {
-        await servifyApi.deleteRequest(String(req.id), userId);
-        setApiRequests((items) => items.filter((item) => item.id !== req.id));
-      } else {
-        await servifyApi.cancelRequest(String(req.id), userId);
-        await loadRequests();
-      }
+      await servifyApi.cancelRequest(String(req.id), userId);
+      setConfirmation(null);
+      await loadRequests();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo actualizar la solicitud");
     } finally {
@@ -374,7 +412,8 @@ export function RequestsScreen({
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-3" {...pullHandlers}>
+        <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         {error && (
           <p className="rounded-2xl px-4 py-3" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>
             {error}
@@ -389,8 +428,12 @@ export function RequestsScreen({
         {data.map((req, i) => {
           const st = statusConfig[req.status];
           const showRepeat = canRepeatOwnRequest(req);
-          const showManage = canManageOwnRequest(req);
+          const showEdit = canEditOwnRequest(req);
+          const showCancel = canCancelOwnRequest(req);
+          const showHide = canHideCompletedRequest(req);
           const showKeepSearching = canKeepSearchingCounterOffer(req);
+          const showOwnActions = req.viewerRole === "SOLICITANTE"
+            && (showRepeat || showEdit || showCancel || showHide || showKeepSearching);
           return (
             <motion.div
               key={req.id}
@@ -458,7 +501,7 @@ export function RequestsScreen({
                 </div>
               </div>
 
-              {req.viewerRole === "SOLICITANTE" && (showRepeat || showManage || showKeepSearching) ? (
+              {showOwnActions ? (
                 <div
                   className="servify-card-footer mt-4 pt-3 grid grid-cols-2 gap-2"
                   style={{ borderTop: "1px solid #f1f5f9" }}
@@ -488,39 +531,41 @@ export function RequestsScreen({
                       Seguir buscando
                     </button>
                   ) : null}
-                  {showManage ? (
-                    <>
+                  {showEdit ? (
                   <button
                     type="button"
-                    disabled={Boolean(actionLoading) || !canEditOwnRequest(req)}
+                    disabled={Boolean(actionLoading)}
                     onClick={() => openEditRequest(req)}
                     className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
-                    style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 12, fontWeight: 800, opacity: canEditOwnRequest(req) ? 1 : 0.55 }}
+                    style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 12, fontWeight: 800 }}
                   >
                     <Edit2 size={14} strokeWidth={2} />
                     Editar
                   </button>
+                  ) : null}
+                  {showCancel ? (
                   <button
                     type="button"
                     disabled={Boolean(actionLoading)}
-                    onClick={() => handleCancelRequest(req, false)}
+                    onClick={() => requestCancelRequest(req)}
                     className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                     style={{ background: "#fffbeb", color: "#d97706", border: "1.5px solid #fde68a", fontSize: 12, fontWeight: 800 }}
                   >
                     <Ban size={14} strokeWidth={2} />
                     Cancelar
                   </button>
+                  ) : null}
+                  {showHide ? (
                   <button
                     type="button"
                     disabled={Boolean(actionLoading)}
-                    onClick={() => handleCancelRequest(req, true)}
+                    onClick={() => requestHideCompletedRequest(req)}
                     className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                     style={{ background: "#fef2f2", color: "#dc2626", border: "1.5px solid #fecaca", fontSize: 12, fontWeight: 800 }}
                   >
                     <Trash2 size={14} strokeWidth={2} />
                     Eliminar
                   </button>
-                    </>
                   ) : null}
                 </div>
               ) : null}
@@ -609,6 +654,15 @@ export function RequestsScreen({
           onSave={handleUpdateRequest}
         />
       ) : null}
+
+      {confirmation ? (
+        <RequestActionDialog
+          confirmation={confirmation}
+          loading={actionLoading.endsWith("CANCEL")}
+          onClose={() => setConfirmation(null)}
+          onConfirm={handleConfirmedRequestAction}
+        />
+      ) : null}
     </div>
   );
 }
@@ -666,10 +720,10 @@ function toUiStatus(status?: string): ServiceRequest["status"] {
   if (status === "CANCELADA" || status === "RECHAZADA" || status === "EXPIRADA") return "cancelled";
   if (status === "FINALIZADA") return "completed";
   if (status === "CONTRAOFERTADA") return "counter-offer";
+  if (status === "ACEPTADA") return "pending-acceptance";
   if (
     status === "ASIGNADA" ||
     status === "EN_CURSO" ||
-    status === "ACEPTADA" ||
     status === "CERRADA"
   ) return "in-progress";
   return "open";
@@ -713,12 +767,16 @@ function applyAssignmentState(
     return { ...withProvider, rawStatus: nextRawStatus, status: "completed" };
   }
 
-  if (state.asignacion || acceptedCount > 0 || state.estadoSolicitud === "ASIGNADA") {
+  if (state.asignacion || state.estadoSolicitud === "ASIGNADA") {
     return { ...withProvider, rawStatus: nextRawStatus, status: "in-progress" };
   }
 
   if (counterOfferCount > 0) {
     return { ...withProvider, rawStatus: nextRawStatus, status: "counter-offer" };
+  }
+
+  if (acceptedCount > 0) {
+    return { ...withProvider, rawStatus: nextRawStatus, status: "pending-acceptance" };
   }
 
   return { ...withProvider, rawStatus: nextRawStatus };
@@ -731,17 +789,19 @@ function canProviderRespond(req: ServiceRequest): boolean {
 }
 
 function canRepeatOwnRequest(req: ServiceRequest): boolean {
-  return req.viewerRole === "SOLICITANTE"
-    && !["in-progress", "counter-offer", "completed"].includes(req.status);
-}
-
-function canManageOwnRequest(req: ServiceRequest): boolean {
-  return req.viewerRole === "SOLICITANTE"
-    && !["completed", "cancelled", "counter-offer", "in-progress"].includes(req.status);
+  return req.viewerRole === "SOLICITANTE" && req.status === "completed";
 }
 
 function canEditOwnRequest(req: ServiceRequest): boolean {
   return req.viewerRole === "SOLICITANTE" && req.status === "open";
+}
+
+function canCancelOwnRequest(req: ServiceRequest): boolean {
+  return req.viewerRole === "SOLICITANTE" && req.status === "open";
+}
+
+function canHideCompletedRequest(req: ServiceRequest): boolean {
+  return req.viewerRole === "SOLICITANTE" && req.status === "completed";
 }
 
 function canKeepSearchingCounterOffer(req: ServiceRequest): boolean {
@@ -907,6 +967,81 @@ function EditField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+function RequestActionDialog({
+  confirmation,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  confirmation: RequestActionConfirmation;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const isHide = confirmation.action === "hide";
+  const title = isHide ? "Quitar del historial" : "Cancelar solicitud";
+  const message = isHide
+    ? "La solicitud va a dejar de mostrarse en tu lista. La informacion del servicio finalizado se conserva."
+    : "La solicitud va a dejar de buscar prestadores y quedara registrada como cancelada.";
+  const confirmLabel = isHide ? "Quitar" : "Cancelar solicitud";
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-end" style={{ background: "rgba(15,23,42,0.34)" }} onClick={onClose}>
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 28, stiffness: 280 }}
+        className="w-full rounded-t-3xl bg-white px-5 pb-7 pt-3"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mx-auto mb-4 rounded-full" style={{ width: 42, height: 4, background: "#e2e8f0" }} />
+        <div className="flex items-start gap-3">
+          <div
+            className="flex shrink-0 items-center justify-center rounded-2xl"
+            style={{ width: 46, height: 46, background: isHide ? "#fef2f2" : "#fffbeb", color: isHide ? "#dc2626" : "#d97706" }}
+          >
+            {isHide ? <Trash2 size={20} strokeWidth={2.2} /> : <Ban size={20} strokeWidth={2.2} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p style={{ color: "#0f172a", fontSize: 18, fontWeight: 900 }}>{title}</p>
+            <p style={{ color: "#64748b", fontSize: 13, fontWeight: 700, lineHeight: 1.45, marginTop: 5 }}>
+              {message}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-2xl py-3 transition-all active:scale-95"
+            style={{ background: "#f1f5f9", color: "#475569", fontSize: 14, fontWeight: 900 }}
+          >
+            Volver
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-2xl py-3 transition-all active:scale-95"
+            style={{
+              background: isHide ? "#dc2626" : "#d97706",
+              color: "white",
+              fontSize: 14,
+              fontWeight: 900,
+              opacity: loading ? 0.72 : 1,
+            }}
+          >
+            {loading ? "Procesando..." : confirmLabel}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
   return (
     <span
@@ -975,6 +1110,28 @@ function collectProviderIds(
   ].filter((id): id is string => Boolean(id));
 }
 
+function hiddenRequestsKey(userId?: string): string {
+  return `servify.hidden-requests.${userId ?? "anonymous"}`;
+}
+
+function readHiddenRequestIds(userId?: string): Set<string> {
+  if (!userId || typeof localStorage === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(hiddenRequestsKey(userId));
+    const values = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(values) ? values.map(String) : []);
+  } catch {
+    localStorage.removeItem(hiddenRequestsKey(userId));
+    return new Set();
+  }
+}
+
+function hideCompletedRequest(userId: string, requestId: string) {
+  const next = readHiddenRequestIds(userId);
+  next.add(requestId);
+  localStorage.setItem(hiddenRequestsKey(userId), JSON.stringify(Array.from(next)));
+}
+
 function sortRequestsForDisplay(items: ServiceRequest[]): ServiceRequest[] {
   return [...items].sort((a, b) => requestStatusPriority(a) - requestStatusPriority(b));
 }
@@ -982,13 +1139,13 @@ function sortRequestsForDisplay(items: ServiceRequest[]): ServiceRequest[] {
 function filterRequestsByTime(items: ServiceRequest[], filter: TimeFilter): ServiceRequest[] {
   if (filter === "all") return items;
   if (filter === "active") {
-    return items.filter((req) => ["open", "in-progress", "counter-offer"].includes(req.status));
+    return items.filter((req) => ["open", "pending-acceptance", "in-progress", "counter-offer"].includes(req.status));
   }
 
   const days = Number(filter);
   const since = Date.now() - days * 24 * 60 * 60 * 1000;
   return items.filter((req) => {
-    if (["open", "in-progress", "counter-offer"].includes(req.status)) return true;
+    if (["open", "pending-acceptance", "in-progress", "counter-offer"].includes(req.status)) return true;
     const date = req.rawDate ? new Date(req.rawDate) : null;
     return Boolean(date && !Number.isNaN(date.getTime()) && date.getTime() >= since);
   });
@@ -996,10 +1153,11 @@ function filterRequestsByTime(items: ServiceRequest[], filter: TimeFilter): Serv
 
 function requestStatusPriority(req: ServiceRequest): number {
   if (req.status === "in-progress") return 0;
-  if (req.status === "counter-offer") return 1;
-  if (req.status === "open") return 2;
-  if (req.status === "completed") return 3;
-  return 4;
+  if (req.status === "pending-acceptance") return 1;
+  if (req.status === "counter-offer") return 2;
+  if (req.status === "open") return 3;
+  if (req.status === "completed") return 4;
+  return 5;
 }
 
 function buildCategoryMap(categories: ApiCategory[]): Map<string, string> {

@@ -149,7 +149,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser, onProvider
     ? initialsFromName(providerName)
     : request.providerInitials || initialsFromName(providerName);
   const proposalMessage = assignment?.estado
-    ? `Estado de asignación: ${assignment.estado}`
+    ? `Estado de asignacion: ${assignment.estado}`
     : proposalData.message;
   const assignmentCompleted = assignment?.estado === "FINALIZADA" || assignmentState?.estadoSolicitud === "FINALIZADA";
   const requesterConfirmed = assignmentCompleted || (assignmentState?.confirmadoPorSolicitante ?? false);
@@ -205,12 +205,14 @@ export function RequestDetail({ request, onBack, onRate, currentUser, onProvider
       isRequesterParticipant &&
       !submitting
   );
-  const chatAvailable = Boolean(
+  const hasChatContext = Boolean(
     currentUser?.id &&
       providerId &&
       participantRole &&
       (hasPendingCounterOffer || hasAcceptedPending || hasProposal)
   );
+  const chatClosed = Boolean(hasChatContext && isCompleted);
+  const chatAvailable = Boolean(hasChatContext && !isCompleted);
   const bothConfirmed = requesterConfirmed && providerConfirmed;
   const canRate = Boolean(
     assignment?.id &&
@@ -226,6 +228,12 @@ export function RequestDetail({ request, onBack, onRate, currentUser, onProvider
   const ratingTargetLabel = confirmationRole === "PRESTADOR" ? "cliente" : "prestador";
   const chatCounterpartName = participantRole === "SOLICITANTE" ? providerName : request.requesterName;
   const chatCounterpartRole = participantRole === "SOLICITANTE" ? "prestador" : "solicitante";
+
+  useEffect(() => {
+    if (isCompleted && showChat) {
+      setShowChat(false);
+    }
+  }, [isCompleted, showChat]);
 
   useEffect(() => {
     if (!assignment?.id || !confirmationRole || !currentUser?.id || typeof request.id !== "string" || !isCompleted) {
@@ -371,6 +379,7 @@ export function RequestDetail({ request, onBack, onRate, currentUser, onProvider
     completed: { label: "Completada", bg: "#f0fdf4", color: "#16a34a" },
     cancelled: { label: "Cancelada", bg: "#fef2f2", color: "#ef4444" },
     "in-progress": { label: "En curso", bg: "#fffbeb", color: "#d97706" },
+    "pending-acceptance": { label: "Pendiente de aceptacion", bg: "#ecfeff", color: "#0891b2" },
     "counter-offer": { label: "Contraoferta", bg: "#fff7ed", color: "#ea580c" },
   };
 
@@ -378,8 +387,10 @@ export function RequestDetail({ request, onBack, onRate, currentUser, onProvider
     ? "completed"
     : hasPendingCounterOffer
     ? "counter-offer"
-    : hasProposal || hasAcceptedPending
+    : hasProposal
     ? "in-progress"
+    : hasAcceptedPending
+    ? "pending-acceptance"
     : request.status;
   const st = statusConfig[displayStatus] ?? statusConfig.open;
 
@@ -584,17 +595,26 @@ export function RequestDetail({ request, onBack, onRate, currentUser, onProvider
           </Card>
         )}
 
-        {chatAvailable && currentUser?.id && (
+        {hasChatContext && currentUser?.id && (
           <Card title="Chat">
             <button
               type="button"
-              onClick={() => setShowChat(true)}
+              onClick={() => {
+                if (!chatClosed) setShowChat(true);
+              }}
+              disabled={chatClosed}
               className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 transition-all active:scale-95"
-              style={{ background: "#eff6ff", color: "#2563eb", border: "1.5px solid #bfdbfe", fontSize: 14, fontWeight: 900 }}
+              style={{
+                background: chatClosed ? "#f1f5f9" : "#eff6ff",
+                color: chatClosed ? "#64748b" : "#2563eb",
+                border: chatClosed ? "1.5px solid #e2e8f0" : "1.5px solid #bfdbfe",
+                fontSize: 14,
+                fontWeight: 900,
+              }}
             >
               <MessageSquare size={17} strokeWidth={2.2} />
-              Abrir chat con {chatCounterpartRole}
-              <Maximize2 size={15} strokeWidth={2.1} />
+              {chatClosed ? "Chat finalizado" : `Abrir chat con ${chatCounterpartRole}`}
+              {!chatClosed ? <Maximize2 size={15} strokeWidth={2.1} /> : null}
             </button>
           </Card>
         )}
