@@ -265,6 +265,10 @@ class MvpApplicationFlowTests {
 
         assertEquals(EstadoContraoferta.ACEPTADA, result.getEstado());
         assertEquals(EstadoDistribucion.ACEPTADA, distribucion.getEstado());
+        assertEquals(
+                BigDecimal.valueOf(1400),
+                ctx.solicitudes.buscarPorId(solicitud.getId()).orElseThrow().getPrecioReferencia()
+        );
     }
 
     @Test
@@ -764,12 +768,30 @@ class MvpApplicationFlowTests {
         }
 
         @Override
+        public List<ConfirmacionFinalizacion> buscarPorEncuentroServicioId(UUID encuentroServicioId) {
+            return confirmaciones.values().stream()
+                    .filter(confirmacion -> Objects.equals(confirmacion.getEncuentroServicioId(), encuentroServicioId))
+                    .toList();
+        }
+
+        @Override
         public Optional<ConfirmacionFinalizacion> buscarPorAsignacionServicioIdYRolConfirmante(
                 UUID asignacionServicioId,
                 RolConfirmante rolConfirmante
         ) {
             return confirmaciones.values().stream()
                     .filter(confirmacion -> Objects.equals(confirmacion.getAsignacionServicioId(), asignacionServicioId))
+                    .filter(confirmacion -> confirmacion.getRolConfirmante() == rolConfirmante)
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<ConfirmacionFinalizacion> buscarPorEncuentroServicioIdYRolConfirmante(
+                UUID encuentroServicioId,
+                RolConfirmante rolConfirmante
+        ) {
+            return confirmaciones.values().stream()
+                    .filter(confirmacion -> Objects.equals(confirmacion.getEncuentroServicioId(), encuentroServicioId))
                     .filter(confirmacion -> confirmacion.getRolConfirmante() == rolConfirmante)
                     .findFirst();
         }

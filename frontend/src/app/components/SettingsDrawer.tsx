@@ -9,6 +9,7 @@ import {
   type RoleType,
   type SessionUser,
 } from "../api";
+import { ProfilePhotoPicker } from "./ProfilePhotoPicker";
 
 type SettingsView = "menu" | "account" | "appearance" | "notifications" | "privacy" | "help";
 type AppearanceMode = "light" | "dark" | "system";
@@ -302,6 +303,7 @@ function AccountSettings({ user, onBack, onUserUpdated }: { user: SessionUser | 
   const [email, setEmail] = useState("");
   const [localidad, setLocalidad] = useState(LOCATION_OPTIONS[0]);
   const [description, setDescription] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const [role, setRole] = useState<Exclude<RoleType, null>>("both");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -321,6 +323,7 @@ function AccountSettings({ user, onBack, onUserUpdated }: { user: SessionUser | 
       setEmail(prefs.email ?? account?.usuario.email ?? user.email ?? "");
       setLocalidad(profile?.ubicacion?.localidad ?? LOCATION_OPTIONS[0]);
       setDescription(profile?.descripcionPersonal ?? "");
+      setPhotoUrl(servifyApi.getStoredProfilePhoto(user.id) || profile?.fotoPerfilUrl || "");
       setRole((prefs.role ?? user.role ?? "both") as Exclude<RoleType, null>);
     });
     return () => {
@@ -338,6 +341,7 @@ function AccountSettings({ user, onBack, onUserUpdated }: { user: SessionUser | 
         apellido: lastName.trim() || "Servify",
         localidad,
         descripcionPersonal: description.trim(),
+        fotoPerfilUrl: /^https?:\/\//i.test(photoUrl.trim()) ? photoUrl.trim() : "",
       });
       const account = await servifyApi.updateAccount(user.id, { nombreUsuario: username.trim() });
       servifyApi.saveProfilePreferences(user.id, { email: email.trim(), role });
@@ -355,8 +359,29 @@ function AccountSettings({ user, onBack, onUserUpdated }: { user: SessionUser | 
     }
   };
 
+  const updatePhoto = (nextPhoto: string) => {
+    if (!user) return;
+    try {
+      servifyApi.saveProfilePhoto(user.id, nextPhoto);
+      setPhotoUrl(nextPhoto);
+      setMessage("");
+    } catch {
+      setMessage("No se pudo guardar la foto en este dispositivo");
+    }
+  };
+
   return (
     <SectionStack onBack={onBack}>
+      <div>
+        <p style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Foto de perfil</p>
+        <ProfilePhotoPicker
+          value={photoUrl}
+          onChange={updatePhoto}
+          onError={setMessage}
+          galleryLabel="Galeria"
+          cameraLabel="Camara"
+        />
+      </div>
       <SettingsInput label="Nombre" value={firstName} onChange={setFirstName} />
       <SettingsInput label="Apellido" value={lastName} onChange={setLastName} />
       <SettingsInput label="Nombre de usuario" value={username} onChange={setUsername} />

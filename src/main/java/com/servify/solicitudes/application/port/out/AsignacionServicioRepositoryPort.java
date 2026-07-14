@@ -17,6 +17,10 @@ public interface AsignacionServicioRepositoryPort {
 
     Optional<AsignacionServicio> buscarPorId(UUID asignacionServicioId);
 
+    default Optional<AsignacionServicio> buscarPorIdParaActualizar(UUID asignacionServicioId) {
+        return buscarPorId(asignacionServicioId);
+    }
+
     // solo tiene sentido si después la implementación puede resolver esa relación por join con SolicitudServicio,
     // porque AsignacionServicio no tiene solicitanteId directo en el dominio.
     Optional<AsignacionServicio> buscarPorSolicitudId(UUID solicitudId);

@@ -26,6 +26,8 @@ import { motion } from "motion/react";
 import { servifyApi, type ApiCategory, type ApiNotification, type ApiPublicProvider, type ApiPublication, type ApiReceivedRequest, type ApiRequest, type SessionUser } from "../api";
 import type { ServiceRequest } from "./RequestsScreen";
 import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
+import { ServisMascot } from "./ServisMascot";
+import { ServisHint } from "./ServisHint";
 import servifySymbol from "../../imports/servify-symbol.png";
 
 type CategoryImageKey = "home" | "trades" | "classes" | "tech" | "cleaning" | "design" | "repair" | "photo" | "wellness" | "other";
@@ -309,9 +311,12 @@ export function ExploreScreen({
           </button>
         </div>
 
-        <div className="mb-5">
-          <h1 className="servify-home-title">¡Hola, {firstName}!</h1>
-          <p className="servify-home-subtitle">Que necesitas hoy?</p>
+        <div className="servify-home-greeting mb-5">
+          <div className="servify-home-greeting-copy">
+            <h1 className="servify-home-title">Hola, {firstName}</h1>
+            <p className="servify-home-subtitle">Que necesitas hoy?</p>
+          </div>
+          <ServisMascot size="lg" className="servify-home-servis" decorative />
         </div>
 
         {activityOpen ? (
@@ -415,7 +420,14 @@ export function ExploreScreen({
               </p>
             ) : null}
             <div className="flex flex-col gap-2.5">
-              {compatibleRequests.length === 0 && <p style={{ color: "#64748b" }}>No hay solicitudes compatibles por ahora</p>}
+              {compatibleRequests.length === 0 && (
+                <ServisHint
+                  compact
+                  tone="quiet"
+                  title="Estoy buscando coincidencias"
+                  detail="Cuando aparezca una solicitud compatible con tus servicios, la vas a ver aca para aceptar, rechazar o contraofertar."
+                />
+              )}
               {compatibleRequests.map((r, i) => (
                 <motion.div
                   key={r.id}

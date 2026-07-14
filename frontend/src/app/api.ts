@@ -1,6 +1,8 @@
 export type RoleType = "client" | "provider" | "both" | null;
 export type ApiRole = "ADMIN" | "USUARIO";
 export type ApiModality = "PRESENCIAL" | "VIRTUAL" | "MIXTA";
+export type ApiScheduleType = "INMEDIATA" | "PROGRAMADA" | "RECURRENTE";
+export type ApiRecurrenceFrequency = "SEMANAL" | "QUINCENAL" | "MENSUAL";
 
 export interface SessionUser {
   id: string;
@@ -169,6 +171,9 @@ export interface ApiRequest {
   estado?: string;
   createdAt?: string;
   fechaSolicitud?: string;
+  tipoProgramacion?: ApiScheduleType;
+  fechaProgramadaInicio?: string;
+  fechaProgramadaFin?: string;
 }
 
 export interface ApiReceivedRequest extends ApiRequest {
@@ -227,6 +232,23 @@ export interface ApiAssignmentState {
   confirmadoPorSolicitante?: boolean;
   confirmadoPorPrestador?: boolean;
   finalizacionConfirmada?: boolean;
+  encuentroActivoId?: string;
+}
+
+export type ApiServicePaymentStatus = "PENDIENTE" | "APROBADO" | "RECHAZADO" | "CANCELADO" | "ERROR";
+
+export interface ApiServicePayment {
+  id: string;
+  solicitudId: string;
+  asignacionServicioId: string;
+  encuentroId?: string;
+  estado: ApiServicePaymentStatus;
+  monto: number;
+  moneda: "ARS";
+  checkoutUrl?: string;
+  mercadoPagoPaymentId?: string;
+  aprobadoEn?: string;
+  canConfirmProvider: boolean;
 }
 
 export interface ApiLocation {
@@ -358,6 +380,35 @@ export interface ApiChatMessage {
   remitenteId: string;
   contenido: string;
   fechaEnvio?: string;
+}
+
+export interface ApiServiceEncounter {
+  id: string;
+  solicitudId: string;
+  asignacionServicioId?: string;
+  recurrenciaServicioId?: string;
+  propuestoPorId?: string;
+  fechaInicio: string;
+  fechaFin: string;
+  estado: "PROPUESTO" | "CONFIRMADO" | "RECHAZADO" | "CANCELADO" | "COMPLETADO";
+  mensaje?: string;
+  fechaResolucion?: string;
+}
+
+export interface ApiServiceRecurrence {
+  id: string;
+  solicitudId: string;
+  asignacionServicioId?: string;
+  frecuencia: ApiRecurrenceFrequency;
+  diaSemana: string;
+  horaDesde: string;
+  horaHasta: string;
+  fechaInicio: string;
+  fechaFin?: string;
+  estado: "BUSCANDO_PRESTADOR" | "ACTIVA" | "CANCELADA" | "FINALIZADA";
+  canceladaPorId?: string;
+  fechaCancelacion?: string;
+  motivoCancelacion?: string;
 }
 
 export interface ProfilePreferences {
@@ -849,6 +900,12 @@ export const servifyApi = {
     disponibilidadDia?: string;
     horaDesde?: string;
     horaHasta?: string;
+    tipoProgramacion?: ApiScheduleType;
+    fechaProgramadaInicio?: string;
+    fechaProgramadaFin?: string;
+    frecuenciaRecurrencia?: ApiRecurrenceFrequency;
+    fechaInicioRecurrencia?: string;
+    fechaFinRecurrencia?: string;
   }) {
     const category = await this.ensureCategory(input.categoria);
     return request<ApiRequest>("/solicitudes", {
@@ -861,6 +918,12 @@ export const servifyApi = {
         disponibilidadRequerida: buildAvailability(input.disponibilidadDia, input.horaDesde, input.horaHasta),
         descripcionNecesidad: input.descripcion,
         precioReferencia: parseOptionalMoney(input.precio),
+        tipoProgramacion: input.tipoProgramacion ?? "INMEDIATA",
+        fechaProgramadaInicio: input.fechaProgramadaInicio,
+        fechaProgramadaFin: input.fechaProgramadaFin,
+        frecuenciaRecurrencia: input.frecuenciaRecurrencia,
+        fechaInicioRecurrencia: input.fechaInicioRecurrencia,
+        fechaFinRecurrencia: input.fechaFinRecurrencia,
       }),
     });
   },
@@ -875,6 +938,9 @@ export const servifyApi = {
     disponibilidadDia?: string;
     horaDesde?: string;
     horaHasta?: string;
+    tipoProgramacion?: ApiScheduleType;
+    fechaProgramadaInicio?: string;
+    fechaProgramadaFin?: string;
   }) {
     return request<ApiRequest>(`/solicitudes/${input.solicitudId}`, {
       method: "PUT",
@@ -885,6 +951,9 @@ export const servifyApi = {
         disponibilidadRequerida: buildAvailability(input.disponibilidadDia, input.horaDesde, input.horaHasta),
         descripcionNecesidad: input.descripcion,
         precioReferencia: parseOptionalMoney(input.precio),
+        tipoProgramacion: input.tipoProgramacion,
+        fechaProgramadaInicio: input.fechaProgramadaInicio,
+        fechaProgramadaFin: input.fechaProgramadaFin,
       }),
     });
   },
@@ -968,6 +1037,66 @@ export const servifyApi = {
     });
   },
 
+  async listServiceEncounters(solicitudId: string) {
+    const encounters = await request<ApiServiceEncounter[] | undefined>(`/solicitudes/${solicitudId}/encuentros`);
+    return Array.isArray(encounters) ? encounters : [];
+  },
+
+  proposeServiceEncounter(input: {
+    solicitudId: string;
+    asignacionServicioId?: string;
+    propuestoPorId: string;
+    fechaInicio: string;
+    fechaFin: string;
+    mensaje?: string;
+  }) {
+    return request<ApiServiceEncounter>(`/solicitudes/${input.solicitudId}/encuentros`, {
+      method: "POST",
+      body: JSON.stringify({
+        asignacionServicioId: input.asignacionServicioId,
+        propuestoPorId: input.propuestoPorId,
+        fechaInicio: input.fechaInicio,
+        fechaFin: input.fechaFin,
+        mensaje: input.mensaje ?? "",
+      }),
+    });
+  },
+
+  resolveServiceEncounter(input: {
+    encuentroId: string;
+    usuarioId: string;
+    decision: "ACEPTAR" | "RECHAZAR";
+  }) {
+    return request<ApiServiceEncounter>(`/encuentros/${input.encuentroId}/resoluciones`, {
+      method: "POST",
+      body: JSON.stringify({
+        usuarioId: input.usuarioId,
+        decision: input.decision,
+      }),
+    });
+  },
+
+  cancelServiceEncounter(input: { encuentroId: string; usuarioId: string }) {
+    return request<ApiServiceEncounter>(`/encuentros/${input.encuentroId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ usuarioId: input.usuarioId }),
+    });
+  },
+
+  async getServiceRecurrence(solicitudId: string) {
+    return (await request<ApiServiceRecurrence | undefined>(`/solicitudes/${solicitudId}/recurrencia`)) ?? null;
+  },
+
+  cancelServiceRecurrence(input: { solicitudId: string; usuarioId: string; motivo?: string }) {
+    return request<ApiServiceRecurrence>(`/solicitudes/${input.solicitudId}/recurrencia`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        usuarioId: input.usuarioId,
+        motivo: input.motivo ?? "",
+      }),
+    });
+  },
+
   confirmAssignment(input: {
     solicitudId: string;
     distribucionSolicitudId: string;
@@ -985,9 +1114,28 @@ export const servifyApi = {
     );
   },
 
+  agreeAssignmentPrice(input: {
+    solicitudId: string;
+    asignacionServicioId: string;
+    solicitanteId: string;
+    precioAcordado: string;
+  }) {
+    return request<NonNullable<ApiAssignmentState["asignacion"]>>(
+      `/solicitudes/${input.solicitudId}/asignaciones/${input.asignacionServicioId}/precio`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          solicitanteId: input.solicitanteId,
+          precioAcordado: parseMoney(input.precioAcordado),
+        }),
+      }
+    );
+  },
+
   async confirmServiceCompletion(input: {
     solicitudId: string;
     asignacionServicioId: string;
+    encuentroId?: string;
     confirmanteId: string;
     rolConfirmante: "SOLICITANTE" | "PRESTADOR";
     observacion?: string;
@@ -996,11 +1144,54 @@ export const servifyApi = {
       method: "POST",
       body: JSON.stringify({
         asignacionServicioId: input.asignacionServicioId,
+        encuentroId: input.encuentroId,
         confirmanteId: input.confirmanteId,
         rolConfirmante: input.rolConfirmante,
         observacion: input.observacion ?? "",
       }),
     });
+  },
+
+  createServicePaymentCheckout(input: {
+    solicitudId: string;
+    solicitanteId: string;
+    asignacionServicioId: string;
+    encuentroId?: string;
+  }) {
+    return request<ApiServicePayment>(`/solicitudes/${input.solicitudId}/pagos/checkout`, {
+      method: "POST",
+      body: JSON.stringify({
+        solicitanteId: input.solicitanteId,
+        asignacionServicioId: input.asignacionServicioId,
+        encuentroId: input.encuentroId,
+      }),
+    });
+  },
+
+  syncServicePayment(input: {
+    pagoId: string;
+    solicitanteId: string;
+    mercadoPagoPaymentId?: string;
+  }) {
+    return request<ApiServicePayment>(`/pagos/${input.pagoId}/sincronizacion`, {
+      method: "POST",
+      body: JSON.stringify({
+        solicitanteId: input.solicitanteId,
+        mercadoPagoPaymentId: input.mercadoPagoPaymentId,
+      }),
+    });
+  },
+
+  getServicePaymentState(input: {
+    solicitudId: string;
+    asignacionServicioId: string;
+    encuentroId?: string;
+  }) {
+    const params = new URLSearchParams({ asignacionServicioId: input.asignacionServicioId });
+    if (input.encuentroId) params.set("encuentroId", input.encuentroId);
+    return request<ApiServicePayment | undefined>(
+      `/solicitudes/${input.solicitudId}/pagos/estado?${params.toString()}`
+    );
   },
 
   async rateService(input: {

@@ -3,6 +3,7 @@ import { Plus, MapPin, Users, DollarSign, Clock, CheckCircle, XCircle, MessageSq
 import { motion } from "motion/react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, formatMoney, fromApiModality, servifyApi, type ApiCategory, type ApiReceivedRequest, type ApiRequest, type ApiUserProfile } from "../api";
 import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
+import { ServisHint } from "./ServisHint";
 
 type RequestTab = "my-requests" | "my-proposals";
 type TimeFilter = "active" | "30" | "90" | "all";
@@ -30,10 +31,14 @@ export interface ServiceRequest {
   availabilityDay?: string;
   availabilityFrom?: string;
   availabilityTo?: string;
+  scheduleType?: ApiRequest["tipoProgramacion"];
+  scheduledStart?: string;
+  scheduledEnd?: string;
   distributionId?: string;
   counterOfferId?: string;
   providerId?: string;
   rawStatus?: string;
+  openChat?: boolean;
 }
 
 type EditRequestForm = {
@@ -441,6 +446,13 @@ export function RequestsScreen({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.06 }}
               onClick={() => onRequestPress(req)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onRequestPress(req);
+                }
+              }}
               role="button"
               tabIndex={0}
               className="servify-card servify-request-card bg-white rounded-2xl p-4 text-left w-full transition-all active:scale-[0.98]"
@@ -465,6 +477,7 @@ export function RequestsScreen({
               <div className="flex flex-wrap gap-2 mb-3">
                 <Chip label={req.category} color="#0891b2" bg="#ecfeff" />
                 <Chip label={req.modal} color="#7c3aed" bg="#f5f3ff" />
+                <Chip label={requestTypeLabel(req.scheduleType)} color="#0f766e" bg="#f0fdfa" />
               </div>
 
               {req.viewerRole === "SOLICITANTE" && req.providerName ? (
@@ -703,6 +716,9 @@ function mapRequest(
     availabilityDay: req.disponibilidadRequerida?.diaSemana,
     availabilityFrom: req.disponibilidadRequerida?.horaDesde?.slice(0, 5),
     availabilityTo: req.disponibilidadRequerida?.horaHasta?.slice(0, 5),
+    scheduleType: req.tipoProgramacion,
+    scheduledStart: req.fechaProgramadaInicio,
+    scheduledEnd: req.fechaProgramadaFin,
     distributionId: received.distribucionSolicitudId,
     providerId: received.prestadorId,
     rawStatus,
@@ -710,10 +726,29 @@ function mapRequest(
 }
 
 function formatAvailability(req: ApiRequest): string {
+  if (req.tipoProgramacion === "PROGRAMADA" && req.fechaProgramadaInicio) {
+    const start = new Date(req.fechaProgramadaInicio);
+    const end = req.fechaProgramadaFin ? new Date(req.fechaProgramadaFin) : null;
+    if (!Number.isNaN(start.getTime())) {
+      const date = start.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+      const from = start.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+      const to = end && !Number.isNaN(end.getTime())
+        ? end.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+        : "";
+      return `Programada ${date} ${from}${to ? `-${to}` : ""}`;
+    }
+  }
   const availability = req.disponibilidadRequerida;
   if (!availability) return "Horario a coordinar";
   const day = WEEK_DAYS.find((item) => item.value === availability.diaSemana)?.label ?? availability.diaSemana;
-  return `${day} ${availability.horaDesde.slice(0, 5)}-${availability.horaHasta.slice(0, 5)}`;
+  const prefix = req.tipoProgramacion === "RECURRENTE" ? "Recurrente " : "";
+  return `${prefix}${day} ${availability.horaDesde.slice(0, 5)}-${availability.horaHasta.slice(0, 5)}`;
+}
+
+function requestTypeLabel(scheduleType?: ApiRequest["tipoProgramacion"]): string {
+  if (scheduleType === "PROGRAMADA") return "Programada";
+  if (scheduleType === "RECURRENTE") return "Recurrente";
+  return "Actual";
 }
 
 function toUiStatus(status?: string): ServiceRequest["status"] {
@@ -760,8 +795,13 @@ function applyAssignmentState(
     state.asignacion?.estado ??
     state.distribucionesAceptadas?.[0]?.estado ??
     (counterOfferCount > 0 ? "CONTRAOFERTADA" : undefined) ??
+    (req.viewerRole === "PRESTADOR" ? req.rawStatus : undefined) ??
     state.estadoSolicitud ??
     req.rawStatus;
+
+  if (state.estadoSolicitud === "CANCELADA" || state.asignacion?.estado === "CANCELADA") {
+    return { ...withProvider, rawStatus: nextRawStatus, status: "cancelled" };
+  }
 
   if (state.finalizacionConfirmada || state.estadoSolicitud === "FINALIZADA" || state.asignacion?.estado === "FINALIZADA") {
     return { ...withProvider, rawStatus: nextRawStatus, status: "completed" };
@@ -785,6 +825,7 @@ function applyAssignmentState(
 function canProviderRespond(req: ServiceRequest): boolean {
   return req.viewerRole === "PRESTADOR"
     && Boolean(req.distributionId)
+    && req.status === "open"
     && (req.rawStatus ?? "").toUpperCase() === "ENVIADA";
 }
 

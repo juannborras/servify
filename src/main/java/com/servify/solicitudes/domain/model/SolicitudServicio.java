@@ -5,6 +5,7 @@ import com.servify.shared.domain.valueobject.DisponibilidadHoraria;
 import com.servify.shared.domain.model.BaseEntity;
 import com.servify.shared.domain.valueobject.Ubicacion;
 import com.servify.solicitudes.domain.enumtype.EstadoSolicitud;
+import com.servify.solicitudes.domain.enumtype.TipoProgramacionSolicitud;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,6 +29,9 @@ public class SolicitudServicio extends BaseEntity {
     private BigDecimal precioReferencia;
     private EstadoSolicitud estado;
     private LocalDateTime fechaSolicitud;
+    private TipoProgramacionSolicitud tipoProgramacion;
+    private LocalDateTime fechaProgramadaInicio;
+    private LocalDateTime fechaProgramadaFin;
 
     protected SolicitudServicio() {
     }
@@ -42,6 +46,24 @@ public class SolicitudServicio extends BaseEntity {
                              BigDecimal precioReferencia,
                              EstadoSolicitud estado,
                              LocalDateTime fechaSolicitud) {
+        this(id, solicitanteId, categoriaServicioId, modalidadServicio, ubicacion, disponibilidadRequerida,
+                descripcionNecesidad, precioReferencia, estado, fechaSolicitud,
+                TipoProgramacionSolicitud.INMEDIATA, null, null);
+    }
+
+    public SolicitudServicio(UUID id,
+                             UUID solicitanteId,
+                             UUID categoriaServicioId,
+                             ModalidadServicio modalidadServicio,
+                             Ubicacion ubicacion,
+                             DisponibilidadHoraria disponibilidadRequerida,
+                             String descripcionNecesidad,
+                             BigDecimal precioReferencia,
+                             EstadoSolicitud estado,
+                             LocalDateTime fechaSolicitud,
+                             TipoProgramacionSolicitud tipoProgramacion,
+                             LocalDateTime fechaProgramadaInicio,
+                             LocalDateTime fechaProgramadaFin) {
         super(id);
         this.solicitanteId = solicitanteId;
         this.categoriaServicioId = categoriaServicioId;
@@ -52,6 +74,10 @@ public class SolicitudServicio extends BaseEntity {
         this.precioReferencia = precioReferencia;
         this.estado = estado;
         this.fechaSolicitud = fechaSolicitud;
+        this.tipoProgramacion = tipoProgramacion != null ? tipoProgramacion : TipoProgramacionSolicitud.INMEDIATA;
+        this.fechaProgramadaInicio = fechaProgramadaInicio;
+        this.fechaProgramadaFin = fechaProgramadaFin;
+        validarProgramacion();
     }
 
     public UUID getSolicitanteId() {
@@ -88,6 +114,26 @@ public class SolicitudServicio extends BaseEntity {
 
     public LocalDateTime getFechaSolicitud() {
         return fechaSolicitud;
+    }
+
+    public TipoProgramacionSolicitud getTipoProgramacion() {
+        return tipoProgramacion;
+    }
+
+    public LocalDateTime getFechaProgramadaInicio() {
+        return fechaProgramadaInicio;
+    }
+
+    public LocalDateTime getFechaProgramadaFin() {
+        return fechaProgramadaFin;
+    }
+
+    public boolean esProgramada() {
+        return tipoProgramacion == TipoProgramacionSolicitud.PROGRAMADA;
+    }
+
+    public boolean esRecurrente() {
+        return tipoProgramacion == TipoProgramacionSolicitud.RECURRENTE;
     }
 
     public boolean estaBuscandoPrestador() {
@@ -176,6 +222,18 @@ public class SolicitudServicio extends BaseEntity {
         this.precioReferencia = precioReferencia;
     }
 
+    public void actualizarProgramacion(TipoProgramacionSolicitud tipoProgramacion,
+                                       LocalDateTime fechaProgramadaInicio,
+                                       LocalDateTime fechaProgramadaFin) {
+        if (estaAsignada() || estaFinalizada()) {
+            throw new IllegalStateException("No se puede cambiar la programacion en el estado actual");
+        }
+        this.tipoProgramacion = tipoProgramacion != null ? tipoProgramacion : TipoProgramacionSolicitud.INMEDIATA;
+        this.fechaProgramadaInicio = fechaProgramadaInicio;
+        this.fechaProgramadaFin = fechaProgramadaFin;
+        validarProgramacion();
+    }
+
     public void marcarComoBuscandoPrestador() {
         this.estado = EstadoSolicitud.BUSCANDO_PRESTADOR;
     }
@@ -193,5 +251,22 @@ public class SolicitudServicio extends BaseEntity {
             throw new IllegalStateException("La solicitud no puede ser cancelada en su estado actual");
         }
         this.estado = EstadoSolicitud.CANCELADA;
+    }
+
+    private void validarProgramacion() {
+        if (tipoProgramacion == TipoProgramacionSolicitud.PROGRAMADA) {
+            if (fechaProgramadaInicio == null || fechaProgramadaFin == null) {
+                throw new IllegalArgumentException("Las solicitudes programadas requieren fecha de inicio y fin");
+            }
+            if (!fechaProgramadaInicio.isBefore(fechaProgramadaFin)) {
+                throw new IllegalArgumentException("La fecha programada de inicio debe ser anterior a la fecha de fin");
+            }
+        }
+        if (tipoProgramacion == TipoProgramacionSolicitud.INMEDIATA
+                && fechaProgramadaInicio != null
+                && fechaProgramadaFin != null
+                && !fechaProgramadaInicio.isBefore(fechaProgramadaFin)) {
+            throw new IllegalArgumentException("La fecha programada de inicio debe ser anterior a la fecha de fin");
+        }
     }
 }

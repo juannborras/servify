@@ -10,17 +10,22 @@ import com.servify.solicitudes.application.port.out.ConfirmacionFinalizacionRepo
 import com.servify.solicitudes.application.port.out.ContraofertaRepositoryPort;
 import com.servify.solicitudes.application.port.out.DistribucionSolicitudRepositoryPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
+import com.servify.solicitudes.application.port.out.ServicioEncuentroRepositoryPort;
+import com.servify.solicitudes.application.port.out.ServicioRecurrenciaRepositoryPort;
 import com.servify.solicitudes.domain.model.AsignacionServicio;
 import com.servify.solicitudes.domain.model.ConfirmacionFinalizacion;
 import com.servify.solicitudes.domain.model.Contraoferta;
 import com.servify.solicitudes.domain.model.DistribucionSolicitud;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
+import com.servify.solicitudes.domain.model.ServicioEncuentro;
 import com.servify.solicitudes.domain.enumtype.EstadoSolicitud;
 import com.servify.solicitudes.domain.enumtype.RolConfirmante;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Comparator;
+import java.util.Objects;
 
 public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsignacionSolicitudUseCase {
 
@@ -29,17 +34,33 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
     private final AsignacionServicioRepositoryPort asignacionServicioRepositoryPort;
     private final ContraofertaRepositoryPort contraofertaRepositoryPort;
     private final ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort;
+    private final ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort;
+    private final ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort;
 
     public ObtenerEstadoAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
                                                    DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
                                                    AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
                                                    ContraofertaRepositoryPort contraofertaRepositoryPort,
                                                    ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort) {
+        this(solicitudServicioRepositoryPort, distribucionSolicitudRepositoryPort,
+                asignacionServicioRepositoryPort, contraofertaRepositoryPort,
+                confirmacionFinalizacionRepositoryPort, null, null);
+    }
+
+    public ObtenerEstadoAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                                   DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+                                                   AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+                                                   ContraofertaRepositoryPort contraofertaRepositoryPort,
+                                                   ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort,
+                                                   ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+                                                   ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.asignacionServicioRepositoryPort = asignacionServicioRepositoryPort;
         this.contraofertaRepositoryPort = contraofertaRepositoryPort;
         this.confirmacionFinalizacionRepositoryPort = confirmacionFinalizacionRepositoryPort;
+        this.servicioEncuentroRepositoryPort = servicioEncuentroRepositoryPort;
+        this.servicioRecurrenciaRepositoryPort = servicioRecurrenciaRepositoryPort;
     }
 
     @Override
@@ -56,8 +77,11 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
         List<DistribucionSolicitud> distribucionesActivas = obtenerDistribucionesActivas(solicitudId);
         List<DistribucionSolicitud> distribucionesAceptadas = obtenerDistribucionesAceptadas(distribucionesActivas);
         List<Contraoferta> contraofertasPendientes = obtenerContraofertasPendientes(distribucionesActivas);
-        List<ConfirmacionFinalizacion> confirmaciones = asignacion
-                .map(a -> obtenerConfirmacionesDeAsignacion(a.getId()))
+        Optional<ServicioEncuentro> encuentroActivo = asignacion
+                .flatMap(a -> obtenerEncuentroRecurrenteActivo(solicitud, a));
+        List<ConfirmacionFinalizacion> confirmaciones = encuentroActivo
+                .map(encuentro -> confirmacionFinalizacionRepositoryPort.buscarPorEncuentroServicioId(encuentro.getId()))
+                .or(() -> asignacion.map(a -> obtenerConfirmacionesDeAsignacion(a.getId())))
                 .orElseGet(java.util.Collections::emptyList);
 
         return construirResultado(
@@ -66,7 +90,8 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
                 contraofertasPendientes,
                 distribucionesAceptadas,
                 confirmaciones,
-                distribucionesActivas == null ? 0 : distribucionesActivas.size()
+                distribucionesActivas == null ? 0 : distribucionesActivas.size(),
+                encuentroActivo.map(ServicioEncuentro::getId).orElse(null)
         );
     }
 
@@ -106,6 +131,23 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
             return java.util.Collections.emptyList();
         }
         return this.confirmacionFinalizacionRepositoryPort.buscarPorAsignacionServicioId(asignacionServicioId);
+    }
+
+    private Optional<ServicioEncuentro> obtenerEncuentroRecurrenteActivo(SolicitudServicio solicitud,
+                                                                         AsignacionServicio asignacion) {
+        if (!solicitud.esRecurrente()
+                || servicioEncuentroRepositoryPort == null
+                || servicioRecurrenciaRepositoryPort == null) {
+            return Optional.empty();
+        }
+        return servicioRecurrenciaRepositoryPort.buscarPorSolicitudId(solicitud.getId())
+                .filter(recurrencia -> recurrencia.estaActiva())
+                .flatMap(recurrencia -> servicioEncuentroRepositoryPort
+                        .buscarPorAsignacionServicioId(asignacion.getId()).stream()
+                        .filter(Objects::nonNull)
+                        .filter(encuentro -> Objects.equals(encuentro.getRecurrenciaServicioId(), recurrencia.getId()))
+                        .filter(ServicioEncuentro::estaConfirmado)
+                        .min(Comparator.comparing(ServicioEncuentro::getFechaInicio)));
     }
 
     protected List<Contraoferta> obtenerContraofertasPendientes(List<DistribucionSolicitud> distribuciones) {
@@ -177,7 +219,8 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
                                                                  List<Contraoferta> contraofertasPendientes,
                                                                  List<DistribucionSolicitud> distribucionesAceptadas,
                                                                  List<ConfirmacionFinalizacion> confirmaciones,
-                                                                 Integer distribucionesActivas) {
+                                                                 Integer distribucionesActivas,
+                                                                 UUID encuentroActivoId) {
         boolean confirmadoPorSolicitante = existeConfirmacion(confirmaciones, RolConfirmante.SOLICITANTE);
         boolean confirmadoPorPrestador = existeConfirmacion(confirmaciones, RolConfirmante.PRESTADOR);
         boolean asignacionFinalizada = asignacionServicio
@@ -195,7 +238,8 @@ public class ObtenerEstadoAsignacionSolicitudService implements ObtenerEstadoAsi
                 .distribucionesActivas(distribucionesActivas == null ? 0 : distribucionesActivas)
                 .confirmadoPorSolicitante(confirmadoPorSolicitante || finalizacionConfirmada)
                 .confirmadoPorPrestador(confirmadoPorPrestador || finalizacionConfirmada)
-                .finalizacionConfirmada(finalizacionConfirmada);
+                .finalizacionConfirmada(finalizacionConfirmada)
+                .encuentroActivoId(encuentroActivoId);
 
         asignacionServicio.ifPresent(a -> builder.asignacion(construirAsignacionResult(a)));
 

@@ -17,6 +17,7 @@ public class ConfirmacionFinalizacion extends BaseEntity {
 
     private UUID solicitudId;
     private UUID asignacionServicioId;
+    private UUID encuentroServicioId;
     private UUID confirmanteId;
     private RolConfirmante rolConfirmante;
     private Boolean confirmada;
@@ -34,9 +35,23 @@ public class ConfirmacionFinalizacion extends BaseEntity {
                                     Boolean confirmada,
                                     LocalDateTime fechaConfirmacion,
                                     String observacion) {
+        this(id, solicitudId, asignacionServicioId, null, confirmanteId, rolConfirmante,
+                confirmada, fechaConfirmacion, observacion);
+    }
+
+    public ConfirmacionFinalizacion(UUID id,
+                                    UUID solicitudId,
+                                    UUID asignacionServicioId,
+                                    UUID encuentroServicioId,
+                                    UUID confirmanteId,
+                                    RolConfirmante rolConfirmante,
+                                    Boolean confirmada,
+                                    LocalDateTime fechaConfirmacion,
+                                    String observacion) {
         super(id);
         this.solicitudId = solicitudId;
         this.asignacionServicioId = asignacionServicioId;
+        this.encuentroServicioId = encuentroServicioId;
         this.confirmanteId = confirmanteId;
         this.rolConfirmante = rolConfirmante;
         this.confirmada = confirmada;
@@ -50,6 +65,10 @@ public class ConfirmacionFinalizacion extends BaseEntity {
 
     public UUID getAsignacionServicioId() {
         return asignacionServicioId;
+    }
+
+    public UUID getEncuentroServicioId() {
+        return encuentroServicioId;
     }
 
     public UUID getConfirmanteId() {

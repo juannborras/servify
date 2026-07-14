@@ -2,6 +2,7 @@ package com.servify.solicitudes.application.dto;
 
 import com.servify.shared.domain.enumtype.ModalidadServicio;
 import com.servify.solicitudes.domain.enumtype.EstadoSolicitud;
+import com.servify.solicitudes.domain.enumtype.TipoProgramacionSolicitud;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,6 +20,9 @@ public class SolicitudServicioResult {
     private BigDecimal precioReferencia;
     private EstadoSolicitud estado;
     private LocalDateTime fechaSolicitud;
+    private TipoProgramacionSolicitud tipoProgramacion;
+    private LocalDateTime fechaProgramadaInicio;
+    private LocalDateTime fechaProgramadaFin;
 
     public SolicitudServicioResult() {
     }
@@ -33,6 +37,24 @@ public class SolicitudServicioResult {
                                    BigDecimal precioReferencia,
                                    EstadoSolicitud estado,
                                    LocalDateTime fechaSolicitud) {
+        this(id, solicitanteId, categoriaServicioId, modalidadServicio, ubicacion, disponibilidadRequerida,
+                descripcionNecesidad, precioReferencia, estado, fechaSolicitud,
+                TipoProgramacionSolicitud.INMEDIATA, null, null);
+    }
+
+    public SolicitudServicioResult(UUID id,
+                                   UUID solicitanteId,
+                                   UUID categoriaServicioId,
+                                   ModalidadServicio modalidadServicio,
+                                   UbicacionSolicitudResult ubicacion,
+                                   DisponibilidadHorariaResult disponibilidadRequerida,
+                                   String descripcionNecesidad,
+                                   BigDecimal precioReferencia,
+                                   EstadoSolicitud estado,
+                                   LocalDateTime fechaSolicitud,
+                                   TipoProgramacionSolicitud tipoProgramacion,
+                                   LocalDateTime fechaProgramadaInicio,
+                                   LocalDateTime fechaProgramadaFin) {
         this.id = id;
         this.solicitanteId = solicitanteId;
         this.categoriaServicioId = categoriaServicioId;
@@ -43,6 +65,9 @@ public class SolicitudServicioResult {
         this.precioReferencia = precioReferencia;
         this.estado = estado;
         this.fechaSolicitud = fechaSolicitud;
+        this.tipoProgramacion = tipoProgramacion;
+        this.fechaProgramadaInicio = fechaProgramadaInicio;
+        this.fechaProgramadaFin = fechaProgramadaFin;
     }
 
     public UUID getId() {
@@ -83,5 +108,17 @@ public class SolicitudServicioResult {
 
     public LocalDateTime getFechaSolicitud() {
         return fechaSolicitud;
+    }
+
+    public TipoProgramacionSolicitud getTipoProgramacion() {
+        return tipoProgramacion;
+    }
+
+    public LocalDateTime getFechaProgramadaInicio() {
+        return fechaProgramadaInicio;
+    }
+
+    public LocalDateTime getFechaProgramadaFin() {
+        return fechaProgramadaFin;
     }
 }

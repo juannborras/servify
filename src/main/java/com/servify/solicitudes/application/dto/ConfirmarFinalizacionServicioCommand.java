@@ -25,6 +25,7 @@ public class ConfirmarFinalizacionServicioCommand {
 
     private UUID solicitudId;
     private UUID asignacionServicioId;
+    private UUID encuentroServicioId;
     private UUID confirmanteId;
     private RolConfirmante rolConfirmante;
     private String observacion;
@@ -37,8 +38,18 @@ public class ConfirmarFinalizacionServicioCommand {
                                                 UUID confirmanteId,
                                                 RolConfirmante rolConfirmante,
                                                 String observacion) {
+        this(solicitudId, asignacionServicioId, null, confirmanteId, rolConfirmante, observacion);
+    }
+
+    public ConfirmarFinalizacionServicioCommand(UUID solicitudId,
+                                                UUID asignacionServicioId,
+                                                UUID encuentroServicioId,
+                                                UUID confirmanteId,
+                                                RolConfirmante rolConfirmante,
+                                                String observacion) {
         this.solicitudId = solicitudId;
         this.asignacionServicioId = asignacionServicioId;
+        this.encuentroServicioId = encuentroServicioId;
         this.confirmanteId = confirmanteId;
         this.rolConfirmante = rolConfirmante;
         this.observacion = observacion;
@@ -50,6 +61,10 @@ public class ConfirmarFinalizacionServicioCommand {
 
     public UUID getAsignacionServicioId() {
         return asignacionServicioId;
+    }
+
+    public UUID getEncuentroServicioId() {
+        return encuentroServicioId;
     }
 
     public UUID getConfirmanteId() {

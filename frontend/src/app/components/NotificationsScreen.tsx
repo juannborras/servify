@@ -3,6 +3,7 @@ import { ArrowLeft, Bell, CheckCircle2, ChevronRight, RefreshCcw, ShieldAlert, X
 import { motion } from "motion/react";
 import { servifyApi, type ApiNotification } from "../api";
 import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
+import { ServisHint } from "./ServisHint";
 
 interface NotificationsScreenProps {
   userId?: string;
@@ -190,15 +191,11 @@ export function NotificationsScreen({
         ) : null}
 
         {!loading && notifications.length === 0 ? (
-          <div className="servify-empty-state rounded-3xl px-5 py-10 text-center">
-            <Bell size={34} color="#94a3b8" strokeWidth={1.7} />
-            <p className="servify-text-primary" style={{ color: "#0f172a", fontSize: 16, fontWeight: 900, marginTop: 12 }}>
-              Sin notificaciones
-            </p>
-            <p className="servify-text-muted" style={{ color: "#64748b", fontSize: 13, fontWeight: 700, lineHeight: 1.4, marginTop: 5 }}>
-              Los avisos sobre tu cuenta, publicaciones y solicitudes van a aparecer aca.
-            </p>
-          </div>
+          <ServisHint
+            tone="success"
+            title="Todo tranquilo por aca"
+            detail="Los avisos sobre solicitudes, propuestas, agenda y cuenta van a aparecer en este centro."
+          />
         ) : null}
 
         <div className="flex flex-col gap-3">

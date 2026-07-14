@@ -9,6 +9,8 @@ import com.servify.solicitudes.domain.enumtype.RolConfirmante;
 import com.servify.solicitudes.domain.model.AsignacionServicio;
 import com.servify.solicitudes.domain.model.Contraoferta;
 import com.servify.solicitudes.domain.model.DistribucionSolicitud;
+import com.servify.solicitudes.domain.model.ServicioEncuentro;
+import com.servify.solicitudes.domain.model.ServicioRecurrencia;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
 import com.servify.usuarios.application.port.out.PerfilUsuarioRepositoryPort;
 import com.servify.usuarios.application.port.out.UsuarioRepositoryPort;
@@ -23,6 +25,7 @@ import java.util.UUID;
 public class NotificadorEventosSolicitudService {
 
     private static final DateTimeFormatter FECHA_NOTIFICACION = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter FECHA_HORA_NOTIFICACION = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     private final CrearNotificacionUsuarioUseCase crearNotificacionUsuarioUseCase;
     private final UsuarioRepositoryPort usuarioRepositoryPort;
@@ -104,6 +107,73 @@ public class NotificadorEventosSolicitudService {
                 TipoNotificacion.SERVICIO_ASIGNADO,
                 "Servicio asignado",
                 resumenSolicitud(nombreUsuario(solicitud.getSolicitanteId()) + " confirmo tu propuesta. El servicio quedo asignado.", solicitud),
+                "SOLICITUD",
+                solicitud.getId()
+        );
+    }
+
+    public void encuentroPropuesto(SolicitudServicio solicitud, AsignacionServicio asignacion, ServicioEncuentro encuentro) {
+        if (solicitud == null || asignacion == null || encuentro == null) return;
+        UUID destinatario = contraparte(solicitud, asignacion, encuentro.getPropuestoPorId());
+        crear(
+                destinatario,
+                TipoNotificacion.ENCUENTRO_PROPUESTO,
+                "Nuevo encuentro propuesto",
+                resumenSolicitud(nombreUsuario(encuentro.getPropuestoPorId()) + " propuso un nuevo encuentro para "
+                        + fechaHora(encuentro.getFechaInicio()) + ".", solicitud),
+                "SOLICITUD",
+                solicitud.getId()
+        );
+    }
+
+    public void encuentroResuelto(SolicitudServicio solicitud,
+                                  AsignacionServicio asignacion,
+                                  ServicioEncuentro encuentro,
+                                  UUID resueltoPorId) {
+        if (solicitud == null || asignacion == null || encuentro == null || resueltoPorId == null) return;
+        UUID destinatario = contraparte(solicitud, asignacion, resueltoPorId);
+        boolean aceptado = encuentro.estaConfirmado();
+        crear(
+                destinatario,
+                TipoNotificacion.ENCUENTRO_RESUELTO,
+                aceptado ? "Encuentro confirmado" : "Encuentro rechazado",
+                resumenSolicitud(nombreUsuario(resueltoPorId)
+                        + (aceptado ? " acepto" : " rechazo")
+                        + " el encuentro de " + fechaHora(encuentro.getFechaInicio()) + ".", solicitud),
+                "SOLICITUD",
+                solicitud.getId()
+        );
+    }
+
+    public void encuentroCancelado(SolicitudServicio solicitud,
+                                   AsignacionServicio asignacion,
+                                   ServicioEncuentro encuentro,
+                                   UUID canceladoPorId) {
+        if (solicitud == null || asignacion == null || encuentro == null || canceladoPorId == null) return;
+        UUID destinatario = contraparte(solicitud, asignacion, canceladoPorId);
+        crear(
+                destinatario,
+                TipoNotificacion.ENCUENTRO_CANCELADO,
+                "Encuentro cancelado",
+                resumenSolicitud(nombreUsuario(canceladoPorId) + " cancelo el encuentro de "
+                        + fechaHora(encuentro.getFechaInicio()) + ".", solicitud),
+                "SOLICITUD",
+                solicitud.getId()
+        );
+    }
+
+    public void recurrenciaCancelada(SolicitudServicio solicitud,
+                                     AsignacionServicio asignacion,
+                                     ServicioRecurrencia recurrencia,
+                                     UUID canceladaPorId) {
+        if (solicitud == null || asignacion == null || recurrencia == null || canceladaPorId == null) return;
+        UUID destinatario = contraparte(solicitud, asignacion, canceladaPorId);
+        crear(
+                destinatario,
+                TipoNotificacion.RECURRENCIA_CANCELADA,
+                "Servicio recurrente cancelado",
+                resumenSolicitud(nombreUsuario(canceladaPorId)
+                        + " cancelo el servicio recurrente. Asegurate de coordinar cualquier cierre pendiente.", solicitud),
                 "SOLICITUD",
                 solicitud.getId()
         );
@@ -215,6 +285,20 @@ public class NotificadorEventosSolicitudService {
             return "sin fecha";
         }
         return solicitud.getFechaSolicitud().format(FECHA_NOTIFICACION);
+    }
+
+    private String fechaHora(java.time.LocalDateTime fecha) {
+        if (fecha == null) {
+            return "sin fecha";
+        }
+        return fecha.format(FECHA_HORA_NOTIFICACION);
+    }
+
+    private UUID contraparte(SolicitudServicio solicitud, AsignacionServicio asignacion, UUID actorId) {
+        if (actorId != null && actorId.equals(solicitud.getSolicitanteId())) {
+            return asignacion.getPrestadorId();
+        }
+        return solicitud.getSolicitanteId();
     }
 
     private String shortId(UUID id) {

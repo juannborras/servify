@@ -2,6 +2,7 @@ package com.servify.solicitudes.infrastructure.persistence;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -30,6 +31,9 @@ class SolicitudServicioJpaEntity {
     @Column(name = "precio_referencia") private BigDecimal precioReferencia;
     @Column(name = "estado", nullable = false) private String estado;
     @Column(name = "fecha_solicitud") private LocalDateTime fechaSolicitud;
+    @Column(name = "tipo_programacion", nullable = false) private String tipoProgramacion;
+    @Column(name = "fecha_programada_inicio") private LocalDateTime fechaProgramadaInicio;
+    @Column(name = "fecha_programada_fin") private LocalDateTime fechaProgramadaFin;
     @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
 
@@ -54,6 +58,9 @@ class SolicitudServicioJpaEntity {
     public BigDecimal getPrecioReferencia() { return precioReferencia; } public void setPrecioReferencia(BigDecimal v) { this.precioReferencia = v; }
     public String getEstado() { return estado; } public void setEstado(String v) { this.estado = v; }
     public LocalDateTime getFechaSolicitud() { return fechaSolicitud; } public void setFechaSolicitud(LocalDateTime v) { this.fechaSolicitud = v; }
+    public String getTipoProgramacion() { return tipoProgramacion; } public void setTipoProgramacion(String v) { this.tipoProgramacion = v; }
+    public LocalDateTime getFechaProgramadaInicio() { return fechaProgramadaInicio; } public void setFechaProgramadaInicio(LocalDateTime v) { this.fechaProgramadaInicio = v; }
+    public LocalDateTime getFechaProgramadaFin() { return fechaProgramadaFin; } public void setFechaProgramadaFin(LocalDateTime v) { this.fechaProgramadaFin = v; }
     public LocalDateTime getCreatedAt() { return createdAt; } public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
     public LocalDateTime getUpdatedAt() { return updatedAt; } public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 }
@@ -183,6 +190,7 @@ class ConfirmacionFinalizacionJpaEntity {
     @Id @Column(columnDefinition = "uuid") private UUID id;
     @Column(name = "solicitud_id", nullable = false) private Long solicitudId;
     @Column(name = "asignacion_servicio_id", nullable = false) private Long asignacionServicioId;
+    @Column(name = "encuentro_servicio_id") private UUID encuentroServicioId;
     @Column(name = "confirmante_id", nullable = false) private Long confirmanteId;
     @Column(name = "rol_confirmante", nullable = false) private String rolConfirmante;
     @Column(name = "confirmada", nullable = false) private Boolean confirmada;
@@ -195,11 +203,80 @@ class ConfirmacionFinalizacionJpaEntity {
     public UUID getId() { return id; } public void setId(UUID id) { this.id = id; }
     public Long getSolicitudId() { return solicitudId; } public void setSolicitudId(Long v) { this.solicitudId = v; }
     public Long getAsignacionServicioId() { return asignacionServicioId; } public void setAsignacionServicioId(Long v) { this.asignacionServicioId = v; }
+    public UUID getEncuentroServicioId() { return encuentroServicioId; } public void setEncuentroServicioId(UUID v) { this.encuentroServicioId = v; }
     public Long getConfirmanteId() { return confirmanteId; } public void setConfirmanteId(Long v) { this.confirmanteId = v; }
     public String getRolConfirmante() { return rolConfirmante; } public void setRolConfirmante(String v) { this.rolConfirmante = v; }
     public Boolean getConfirmada() { return confirmada; } public void setConfirmada(Boolean v) { this.confirmada = v; }
     public LocalDateTime getFechaConfirmacion() { return fechaConfirmacion; } public void setFechaConfirmacion(LocalDateTime v) { this.fechaConfirmacion = v; }
     public String getObservacion() { return observacion; } public void setObservacion(String v) { this.observacion = v; }
+    public LocalDateTime getCreatedAt() { return createdAt; } public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; } public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
+}
+
+@Entity
+@Table(name = "servicio_encuentro")
+class ServicioEncuentroJpaEntity {
+    @Id @Column(columnDefinition = "uuid") private UUID id;
+    @Column(name = "solicitud_id", nullable = false) private Long solicitudId;
+    @Column(name = "asignacion_servicio_id") private Long asignacionServicioId;
+    @Column(name = "recurrencia_servicio_id") private UUID recurrenciaServicioId;
+    @Column(name = "propuesto_por_id", nullable = false) private Long propuestoPorId;
+    @Column(name = "fecha_inicio", nullable = false) private LocalDateTime fechaInicio;
+    @Column(name = "fecha_fin", nullable = false) private LocalDateTime fechaFin;
+    @Column(name = "estado", nullable = false) private String estado;
+    @Column(name = "mensaje") private String mensaje;
+    @Column(name = "fecha_resolucion") private LocalDateTime fechaResolucion;
+    @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
+    @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
+
+    protected ServicioEncuentroJpaEntity() {}
+    public UUID getId() { return id; } public void setId(UUID id) { this.id = id; }
+    public Long getSolicitudId() { return solicitudId; } public void setSolicitudId(Long v) { this.solicitudId = v; }
+    public Long getAsignacionServicioId() { return asignacionServicioId; } public void setAsignacionServicioId(Long v) { this.asignacionServicioId = v; }
+    public UUID getRecurrenciaServicioId() { return recurrenciaServicioId; } public void setRecurrenciaServicioId(UUID v) { this.recurrenciaServicioId = v; }
+    public Long getPropuestoPorId() { return propuestoPorId; } public void setPropuestoPorId(Long v) { this.propuestoPorId = v; }
+    public LocalDateTime getFechaInicio() { return fechaInicio; } public void setFechaInicio(LocalDateTime v) { this.fechaInicio = v; }
+    public LocalDateTime getFechaFin() { return fechaFin; } public void setFechaFin(LocalDateTime v) { this.fechaFin = v; }
+    public String getEstado() { return estado; } public void setEstado(String v) { this.estado = v; }
+    public String getMensaje() { return mensaje; } public void setMensaje(String v) { this.mensaje = v; }
+    public LocalDateTime getFechaResolucion() { return fechaResolucion; } public void setFechaResolucion(LocalDateTime v) { this.fechaResolucion = v; }
+    public LocalDateTime getCreatedAt() { return createdAt; } public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; } public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
+}
+
+@Entity
+@Table(name = "servicio_recurrencia")
+class ServicioRecurrenciaJpaEntity {
+    @Id @Column(columnDefinition = "uuid") private UUID id;
+    @Column(name = "solicitud_id", nullable = false) private Long solicitudId;
+    @Column(name = "asignacion_servicio_id") private Long asignacionServicioId;
+    @Column(name = "frecuencia", nullable = false) private String frecuencia;
+    @Column(name = "dia_semana", nullable = false) private String diaSemana;
+    @Column(name = "hora_desde", nullable = false) private LocalTime horaDesde;
+    @Column(name = "hora_hasta", nullable = false) private LocalTime horaHasta;
+    @Column(name = "fecha_inicio", nullable = false) private LocalDate fechaInicio;
+    @Column(name = "fecha_fin") private LocalDate fechaFin;
+    @Column(name = "estado", nullable = false) private String estado;
+    @Column(name = "cancelada_por_id") private Long canceladaPorId;
+    @Column(name = "fecha_cancelacion") private LocalDateTime fechaCancelacion;
+    @Column(name = "motivo_cancelacion") private String motivoCancelacion;
+    @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
+    @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
+
+    protected ServicioRecurrenciaJpaEntity() {}
+    public UUID getId() { return id; } public void setId(UUID id) { this.id = id; }
+    public Long getSolicitudId() { return solicitudId; } public void setSolicitudId(Long v) { this.solicitudId = v; }
+    public Long getAsignacionServicioId() { return asignacionServicioId; } public void setAsignacionServicioId(Long v) { this.asignacionServicioId = v; }
+    public String getFrecuencia() { return frecuencia; } public void setFrecuencia(String v) { this.frecuencia = v; }
+    public String getDiaSemana() { return diaSemana; } public void setDiaSemana(String v) { this.diaSemana = v; }
+    public LocalTime getHoraDesde() { return horaDesde; } public void setHoraDesde(LocalTime v) { this.horaDesde = v; }
+    public LocalTime getHoraHasta() { return horaHasta; } public void setHoraHasta(LocalTime v) { this.horaHasta = v; }
+    public LocalDate getFechaInicio() { return fechaInicio; } public void setFechaInicio(LocalDate v) { this.fechaInicio = v; }
+    public LocalDate getFechaFin() { return fechaFin; } public void setFechaFin(LocalDate v) { this.fechaFin = v; }
+    public String getEstado() { return estado; } public void setEstado(String v) { this.estado = v; }
+    public Long getCanceladaPorId() { return canceladaPorId; } public void setCanceladaPorId(Long v) { this.canceladaPorId = v; }
+    public LocalDateTime getFechaCancelacion() { return fechaCancelacion; } public void setFechaCancelacion(LocalDateTime v) { this.fechaCancelacion = v; }
+    public String getMotivoCancelacion() { return motivoCancelacion; } public void setMotivoCancelacion(String v) { this.motivoCancelacion = v; }
     public LocalDateTime getCreatedAt() { return createdAt; } public void setCreatedAt(LocalDateTime v) { this.createdAt = v; }
     public LocalDateTime getUpdatedAt() { return updatedAt; } public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 }

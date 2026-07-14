@@ -17,6 +17,7 @@ public class EstadoAsignacionSolicitudResult {
     private Boolean confirmadoPorSolicitante;
     private Boolean confirmadoPorPrestador;
     private Boolean finalizacionConfirmada;
+    private UUID encuentroActivoId;
 
     private EstadoAsignacionSolicitudResult() {
     }
@@ -59,6 +60,10 @@ public class EstadoAsignacionSolicitudResult {
 
     public Boolean getFinalizacionConfirmada() {
         return finalizacionConfirmada;
+    }
+
+    public UUID getEncuentroActivoId() {
+        return encuentroActivoId;
     }
 
     public static Builder builder() {
@@ -120,6 +125,11 @@ public class EstadoAsignacionSolicitudResult {
 
         public Builder finalizacionConfirmada(Boolean finalizacionConfirmada) {
             instance.finalizacionConfirmada = finalizacionConfirmada;
+            return this;
+        }
+
+        public Builder encuentroActivoId(UUID encuentroActivoId) {
+            instance.encuentroActivoId = encuentroActivoId;
             return this;
         }
 

@@ -55,7 +55,10 @@ public class ObtenerSolicitudServicioService implements ObtenerSolicitudServicio
                 solicitudServicio.getDescripcionNecesidad(),
                 solicitudServicio.getPrecioReferencia(),
                 solicitudServicio.getEstado(),
-                solicitudServicio.getFechaSolicitud()
+                solicitudServicio.getFechaSolicitud(),
+                solicitudServicio.getTipoProgramacion(),
+                solicitudServicio.getFechaProgramadaInicio(),
+                solicitudServicio.getFechaProgramadaFin()
         );
     }
 

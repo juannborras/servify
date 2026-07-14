@@ -7,14 +7,13 @@ import {
   MapPin,
   Calendar,
   Clock,
-  Camera,
-  ImagePlus,
   Eye,
   EyeOff,
   ArrowLeft,
 } from "lucide-react";
 import { LOCATION_OPTIONS, TIME_OPTIONS, WEEK_DAYS, servifyApi, type RoleType, type SessionUser } from "../api";
 import servifySymbol from "../../imports/servify-symbol.png";
+import { ProfilePhotoPicker } from "./ProfilePhotoPicker";
 
 type AuthTab = "welcome" | "login" | "register" | "forgot" | "reset";
 
@@ -93,9 +92,6 @@ const roleOptions: { id: RoleType; label: string; sub: string; emoji: string; co
 ];
 
 export function AuthScreen({ onAuth }: AuthScreenProps) {
-  const registerGalleryInputRef = useRef<HTMLInputElement | null>(null);
-  const registerCameraInputRef = useRef<HTMLInputElement | null>(null);
-
   const [tab, setTab] = useState<AuthTab>("welcome");
   const [showPass, setShowPass] = useState(false);
   const [showRegisterPass, setShowRegisterPass] = useState(false);
@@ -264,24 +260,6 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleProfilePhotoSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Selecciona una imagen valida para tu perfil");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProfilePhotoDataUrl(typeof reader.result === "string" ? reader.result : "");
-      setError("");
-    };
-    reader.onerror = () => setError("No se pudo leer la foto seleccionada");
-    reader.readAsDataURL(file);
   };
 
   if (tab === "welcome") {
@@ -631,40 +609,11 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
                 })}
               </div>
 
-              <div className="flex flex-col items-center gap-2 py-2">
-                <div
-                  className="flex items-center justify-center rounded-full relative overflow-hidden"
-                  style={{ width: 76, height: 76, background: "#f1f5f9", border: "2px dashed #cbd5e1" }}
-                >
-                  {profilePhotoDataUrl ? (
-                    <img src={profilePhotoDataUrl} alt="Foto de perfil" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : (
-                    <Camera size={22} color="#94a3b8" strokeWidth={1.7} />
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 w-full">
-                  <button
-                    type="button"
-                    onClick={() => registerGalleryInputRef.current?.click()}
-                    className="py-2.5 rounded-xl flex items-center justify-center gap-2"
-                    style={{ border: "1px solid #cbd5e1", color: "#0f172a", fontSize: 13, fontWeight: 700 }}
-                  >
-                    <ImagePlus size={15} strokeWidth={1.8} />
-                    Elegir foto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => registerCameraInputRef.current?.click()}
-                    className="py-2.5 rounded-xl flex items-center justify-center gap-2"
-                    style={{ border: "1px solid #cbd5e1", color: "#0f172a", fontSize: 13, fontWeight: 700 }}
-                  >
-                    <Camera size={15} strokeWidth={1.8} />
-                    Sacar foto
-                  </button>
-                </div>
-                <input ref={registerGalleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoSelected} />
-                <input ref={registerCameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleProfilePhotoSelected} />
-              </div>
+              <ProfilePhotoPicker
+                value={profilePhotoDataUrl}
+                onChange={setProfilePhotoDataUrl}
+                onError={setError}
+              />
 
               <div className="flex flex-col gap-3">
                 <InputField icon={<User size={17} color="#94a3b8" strokeWidth={1.8} />} placeholder="Nombre" value={name} onChange={setName} />

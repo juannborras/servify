@@ -94,6 +94,15 @@ public class ActualizarSolicitudServicioService implements ActualizarSolicitudSe
         if (command.getPrecioReferencia() != null) {
             solicitud.actualizarPrecioReferencia(command.getPrecioReferencia());
         }
+        if (command.getTipoProgramacion() != null
+                || command.getFechaProgramadaInicio() != null
+                || command.getFechaProgramadaFin() != null) {
+            solicitud.actualizarProgramacion(
+                    command.getTipoProgramacion() != null ? command.getTipoProgramacion() : solicitud.getTipoProgramacion(),
+                    command.getFechaProgramadaInicio() != null ? command.getFechaProgramadaInicio() : solicitud.getFechaProgramadaInicio(),
+                    command.getFechaProgramadaFin() != null ? command.getFechaProgramadaFin() : solicitud.getFechaProgramadaFin()
+            );
+        }
     }
 
     protected SolicitudServicioResult construirResultado(SolicitudServicio solicitudServicio) {
@@ -107,7 +116,10 @@ public class ActualizarSolicitudServicioService implements ActualizarSolicitudSe
                 solicitudServicio.getDescripcionNecesidad(),
                 solicitudServicio.getPrecioReferencia(),
                 solicitudServicio.getEstado(),
-                solicitudServicio.getFechaSolicitud()
+                solicitudServicio.getFechaSolicitud(),
+                solicitudServicio.getTipoProgramacion(),
+                solicitudServicio.getFechaProgramadaInicio(),
+                solicitudServicio.getFechaProgramadaFin()
         );
     }
 

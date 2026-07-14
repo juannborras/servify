@@ -71,6 +71,10 @@ public class ResolverContraofertaService implements ResolverContraofertaUseCase 
         this.contraofertaRepositoryPort.guardar(contraoferta);
         // persistir distribucion si cambió su estado
         this.distribucionSolicitudRepositoryPort.guardar(distribucion);
+        if (command.getDecision() == TipoDecisionSolicitud.ACEPTAR) {
+            solicitud.actualizarPrecioReferencia(contraoferta.getPrecioPropuesto());
+            this.solicitudServicioRepositoryPort.guardar(solicitud);
+        }
         notificarResolucion(solicitud, contraoferta, command.getDecision());
 
         return construirResultado(contraoferta);

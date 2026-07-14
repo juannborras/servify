@@ -78,6 +78,9 @@ class SolicitudServicioJpaAdapterImpl implements SolicitudServicioRepositoryPort
         e.setPrecioReferencia(s.getPrecioReferencia());
         e.setEstado(s.getEstado() != null ? s.getEstado().name().toLowerCase() : null);
         e.setFechaSolicitud(s.getFechaSolicitud());
+        e.setTipoProgramacion(s.getTipoProgramacion() != null ? s.getTipoProgramacion().name().toLowerCase() : "inmediata");
+        e.setFechaProgramadaInicio(s.getFechaProgramadaInicio());
+        e.setFechaProgramadaFin(s.getFechaProgramadaFin());
         return e;
     }
 
@@ -93,7 +96,10 @@ class SolicitudServicioJpaAdapterImpl implements SolicitudServicioRepositoryPort
                 UsuarioJpaAdapter.uuidFromLong(e.getCategoriaId()),
                 modalidadFromDb(e.getModalidad()), ub, disp,
                 e.getDescripcion(), e.getPrecioReferencia(),
-                EstadoSolicitud.valueOf(e.getEstado().toUpperCase()), e.getFechaSolicitud());
+                EstadoSolicitud.valueOf(e.getEstado().toUpperCase()), e.getFechaSolicitud(),
+                tipoProgramacionFromDb(e.getTipoProgramacion()),
+                e.getFechaProgramadaInicio(),
+                e.getFechaProgramadaFin());
         if (e.getCreatedAt() != null) s.marcarCreacion(e.getCreatedAt());
         if (e.getUpdatedAt() != null) s.marcarModificacion(e.getUpdatedAt());
         return s;
@@ -115,6 +121,11 @@ class SolicitudServicioJpaAdapterImpl implements SolicitudServicioRepositoryPort
     }
 
     static Long longFromUuid(UUID uuid) { return uuid == null ? null : uuid.getLeastSignificantBits(); }
+
+    static TipoProgramacionSolicitud tipoProgramacionFromDb(String value) {
+        if (value == null || value.isBlank()) return TipoProgramacionSolicitud.INMEDIATA;
+        return TipoProgramacionSolicitud.valueOf(value.toUpperCase());
+    }
 }
 
 // ── DistribucionSolicitudJpaAdapterImpl ──────────────────────
@@ -218,6 +229,12 @@ class AsignacionServicioJpaAdapterImpl implements AsignacionServicioRepositoryPo
         return asignacionRepo.findAll().stream()
                 .filter(e -> UsuarioJpaAdapter.uuidFromLong(e.getId()).equals(asignacionId))
                 .findFirst().map(this::toDomain);
+    }
+
+    @Override
+    public Optional<AsignacionServicio> buscarPorIdParaActualizar(UUID asignacionId) {
+        Long id = SolicitudServicioJpaAdapterImpl.longFromUuid(asignacionId);
+        return id == null ? Optional.empty() : asignacionRepo.findByIdForUpdate(id).map(this::toDomain);
     }
 
     @Override
@@ -501,6 +518,155 @@ class ContraofertaJpaAdapterImpl implements ContraofertaRepositoryPort {
 
 // ── SolicitudJpaAdapter (ConfirmacionFinalizacion) ───────────
 @Component
+class ServicioEncuentroJpaAdapterImpl implements ServicioEncuentroRepositoryPort {
+
+    private final ServicioEncuentroJpaRepository encuentroRepo;
+
+    ServicioEncuentroJpaAdapterImpl(ServicioEncuentroJpaRepository encuentroRepo) {
+        this.encuentroRepo = encuentroRepo;
+    }
+
+    @Override
+    public ServicioEncuentro guardar(ServicioEncuentro encuentro) {
+        ServicioEncuentroJpaEntity entity = toEntity(encuentro);
+        if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+        entity.setUpdatedAt(LocalDateTime.now());
+        return toDomain(encuentroRepo.save(entity));
+    }
+
+    @Override
+    public Optional<ServicioEncuentro> buscarPorId(UUID encuentroId) {
+        return encuentroRepo.findById(encuentroId).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<ServicioEncuentro> buscarPorIdParaActualizar(UUID encuentroId) {
+        return encuentroRepo.findByIdForUpdate(encuentroId).map(this::toDomain);
+    }
+
+    @Override
+    public List<ServicioEncuentro> buscarPorSolicitudId(UUID solicitudId) {
+        Long solicitudLongId = SolicitudServicioJpaAdapterImpl.longFromUuid(solicitudId);
+        if (solicitudLongId == null) return List.of();
+        return encuentroRepo.findBySolicitudId(solicitudLongId).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<ServicioEncuentro> buscarPorAsignacionServicioId(UUID asignacionServicioId) {
+        Long asignacionLongId = SolicitudServicioJpaAdapterImpl.longFromUuid(asignacionServicioId);
+        if (asignacionLongId == null) return List.of();
+        return encuentroRepo.findByAsignacionServicioId(asignacionLongId).stream().map(this::toDomain).toList();
+    }
+
+    private ServicioEncuentroJpaEntity toEntity(ServicioEncuentro encuentro) {
+        ServicioEncuentroJpaEntity entity = new ServicioEncuentroJpaEntity();
+        entity.setId(encuentro.getId());
+        entity.setSolicitudId(SolicitudServicioJpaAdapterImpl.longFromUuid(encuentro.getSolicitudId()));
+        entity.setAsignacionServicioId(SolicitudServicioJpaAdapterImpl.longFromUuid(encuentro.getAsignacionServicioId()));
+        entity.setRecurrenciaServicioId(encuentro.getRecurrenciaServicioId());
+        entity.setPropuestoPorId(SolicitudServicioJpaAdapterImpl.longFromUuid(encuentro.getPropuestoPorId()));
+        entity.setFechaInicio(encuentro.getFechaInicio());
+        entity.setFechaFin(encuentro.getFechaFin());
+        entity.setEstado(encuentro.getEstado() != null ? encuentro.getEstado().name().toLowerCase() : null);
+        entity.setMensaje(encuentro.getMensaje());
+        entity.setFechaResolucion(encuentro.getFechaResolucion());
+        return entity;
+    }
+
+    private ServicioEncuentro toDomain(ServicioEncuentroJpaEntity entity) {
+        ServicioEncuentro encuentro = new ServicioEncuentro(
+                entity.getId(),
+                UsuarioJpaAdapter.uuidFromLong(entity.getSolicitudId()),
+                entity.getAsignacionServicioId() != null ? UsuarioJpaAdapter.uuidFromLong(entity.getAsignacionServicioId()) : null,
+                entity.getRecurrenciaServicioId(),
+                UsuarioJpaAdapter.uuidFromLong(entity.getPropuestoPorId()),
+                entity.getFechaInicio(),
+                entity.getFechaFin(),
+                EstadoEncuentroServicio.valueOf(entity.getEstado().toUpperCase()),
+                entity.getMensaje(),
+                entity.getFechaResolucion()
+        );
+        if (entity.getCreatedAt() != null) encuentro.marcarCreacion(entity.getCreatedAt());
+        if (entity.getUpdatedAt() != null) encuentro.marcarModificacion(entity.getUpdatedAt());
+        return encuentro;
+    }
+}
+
+@Component
+class ServicioRecurrenciaJpaAdapterImpl implements ServicioRecurrenciaRepositoryPort {
+
+    private final ServicioRecurrenciaJpaRepository recurrenciaRepo;
+
+    ServicioRecurrenciaJpaAdapterImpl(ServicioRecurrenciaJpaRepository recurrenciaRepo) {
+        this.recurrenciaRepo = recurrenciaRepo;
+    }
+
+    @Override
+    public ServicioRecurrencia guardar(ServicioRecurrencia recurrencia) {
+        ServicioRecurrenciaJpaEntity entity = toEntity(recurrencia);
+        if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+        entity.setUpdatedAt(LocalDateTime.now());
+        return toDomain(recurrenciaRepo.save(entity));
+    }
+
+    @Override
+    public Optional<ServicioRecurrencia> buscarPorId(UUID recurrenciaId) {
+        return recurrenciaRepo.findById(recurrenciaId).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<ServicioRecurrencia> buscarPorIdParaActualizar(UUID recurrenciaId) {
+        return recurrenciaRepo.findByIdForUpdate(recurrenciaId).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<ServicioRecurrencia> buscarPorSolicitudId(UUID solicitudId) {
+        Long solicitudLongId = SolicitudServicioJpaAdapterImpl.longFromUuid(solicitudId);
+        if (solicitudLongId == null) return Optional.empty();
+        return recurrenciaRepo.findBySolicitudId(solicitudLongId).map(this::toDomain);
+    }
+
+    private ServicioRecurrenciaJpaEntity toEntity(ServicioRecurrencia recurrencia) {
+        ServicioRecurrenciaJpaEntity entity = new ServicioRecurrenciaJpaEntity();
+        entity.setId(recurrencia.getId());
+        entity.setSolicitudId(SolicitudServicioJpaAdapterImpl.longFromUuid(recurrencia.getSolicitudId()));
+        entity.setAsignacionServicioId(SolicitudServicioJpaAdapterImpl.longFromUuid(recurrencia.getAsignacionServicioId()));
+        entity.setFrecuencia(recurrencia.getFrecuencia() != null ? recurrencia.getFrecuencia().name().toLowerCase() : null);
+        entity.setDiaSemana(recurrencia.getDiaSemana() != null ? recurrencia.getDiaSemana().name().toLowerCase() : null);
+        entity.setHoraDesde(recurrencia.getHoraDesde());
+        entity.setHoraHasta(recurrencia.getHoraHasta());
+        entity.setFechaInicio(recurrencia.getFechaInicio());
+        entity.setFechaFin(recurrencia.getFechaFin());
+        entity.setEstado(recurrencia.getEstado() != null ? recurrencia.getEstado().name().toLowerCase() : null);
+        entity.setCanceladaPorId(SolicitudServicioJpaAdapterImpl.longFromUuid(recurrencia.getCanceladaPorId()));
+        entity.setFechaCancelacion(recurrencia.getFechaCancelacion());
+        entity.setMotivoCancelacion(recurrencia.getMotivoCancelacion());
+        return entity;
+    }
+
+    private ServicioRecurrencia toDomain(ServicioRecurrenciaJpaEntity entity) {
+        ServicioRecurrencia recurrencia = new ServicioRecurrencia(
+                entity.getId(),
+                UsuarioJpaAdapter.uuidFromLong(entity.getSolicitudId()),
+                entity.getAsignacionServicioId() != null ? UsuarioJpaAdapter.uuidFromLong(entity.getAsignacionServicioId()) : null,
+                FrecuenciaRecurrencia.valueOf(entity.getFrecuencia().toUpperCase()),
+                DayOfWeek.valueOf(entity.getDiaSemana().toUpperCase()),
+                entity.getHoraDesde(),
+                entity.getHoraHasta(),
+                entity.getFechaInicio(),
+                entity.getFechaFin(),
+                EstadoRecurrenciaServicio.valueOf(entity.getEstado().toUpperCase()),
+                entity.getCanceladaPorId() != null ? UsuarioJpaAdapter.uuidFromLong(entity.getCanceladaPorId()) : null,
+                entity.getFechaCancelacion(),
+                entity.getMotivoCancelacion()
+        );
+        if (entity.getCreatedAt() != null) recurrencia.marcarCreacion(entity.getCreatedAt());
+        if (entity.getUpdatedAt() != null) recurrencia.marcarModificacion(entity.getUpdatedAt());
+        return recurrencia;
+    }
+}
+
+@Component
 public class SolicitudJpaAdapter implements ConfirmacionFinalizacionRepositoryPort {
 
     private final ConfirmacionFinalizacionJpaRepository confirmacionRepo;
@@ -547,13 +713,30 @@ public class SolicitudJpaAdapter implements ConfirmacionFinalizacionRepositoryPo
     }
 
     @Override
+    public List<ConfirmacionFinalizacion> buscarPorEncuentroServicioId(UUID encuentroServicioId) {
+        if (encuentroServicioId == null) return List.of();
+        return confirmacionRepo.findByEncuentroServicioId(encuentroServicioId).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public Optional<ConfirmacionFinalizacion> buscarPorAsignacionServicioIdYRolConfirmante(
             UUID asignacionId, RolConfirmante rolConfirmante) {
         return asignacionRepo.findAll().stream()
                 .filter(e -> UsuarioJpaAdapter.uuidFromLong(e.getId()).equals(asignacionId))
                 .findFirst()
-                .flatMap(e -> confirmacionRepo.findByAsignacionServicioIdAndRolConfirmante(
+                .flatMap(e -> confirmacionRepo.findByAsignacionServicioIdAndRolConfirmanteAndEncuentroServicioIdIsNull(
                         e.getId(), rolConfirmante.name().toLowerCase()))
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<ConfirmacionFinalizacion> buscarPorEncuentroServicioIdYRolConfirmante(
+            UUID encuentroServicioId, RolConfirmante rolConfirmante) {
+        if (encuentroServicioId == null || rolConfirmante == null) return Optional.empty();
+        return confirmacionRepo.findByEncuentroServicioIdAndRolConfirmante(
+                        encuentroServicioId, rolConfirmante.name().toLowerCase())
                 .map(this::toDomain);
     }
 
@@ -569,6 +752,7 @@ public class SolicitudJpaAdapter implements ConfirmacionFinalizacionRepositoryPo
         e.setId(c.getId());
         e.setSolicitudId(SolicitudServicioJpaAdapterImpl.longFromUuid(c.getSolicitudId()));
         e.setAsignacionServicioId(SolicitudServicioJpaAdapterImpl.longFromUuid(c.getAsignacionServicioId()));
+        e.setEncuentroServicioId(c.getEncuentroServicioId());
         e.setConfirmanteId(SolicitudServicioJpaAdapterImpl.longFromUuid(c.getConfirmanteId()));
         e.setRolConfirmante(c.getRolConfirmante() != null ? c.getRolConfirmante().name().toLowerCase() : null);
         e.setConfirmada(c.getConfirmada());
@@ -582,6 +766,7 @@ public class SolicitudJpaAdapter implements ConfirmacionFinalizacionRepositoryPo
                 e.getId(),
                 UsuarioJpaAdapter.uuidFromLong(e.getSolicitudId()),
                 UsuarioJpaAdapter.uuidFromLong(e.getAsignacionServicioId()),
+                e.getEncuentroServicioId(),
                 UsuarioJpaAdapter.uuidFromLong(e.getConfirmanteId()),
                 RolConfirmante.valueOf(e.getRolConfirmante().toUpperCase()),
                 e.getConfirmada(), e.getFechaConfirmacion(), e.getObservacion());

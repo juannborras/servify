@@ -16,8 +16,15 @@ public interface ConfirmacionFinalizacionRepositoryPort {
 
     List<ConfirmacionFinalizacion> buscarPorAsignacionServicioId(UUID asignacionServicioId);
 
+    List<ConfirmacionFinalizacion> buscarPorEncuentroServicioId(UUID encuentroServicioId);
+
     Optional<ConfirmacionFinalizacion> buscarPorAsignacionServicioIdYRolConfirmante(
             UUID asignacionServicioId,
+            com.servify.solicitudes.domain.enumtype.RolConfirmante rolConfirmante
+    );
+
+    Optional<ConfirmacionFinalizacion> buscarPorEncuentroServicioIdYRolConfirmante(
+            UUID encuentroServicioId,
             com.servify.solicitudes.domain.enumtype.RolConfirmante rolConfirmante
     );
 

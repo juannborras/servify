@@ -24,7 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-@SpringBootTest(classes = ServifyApplication.class)
+@SpringBootTest(classes = ServifyApplication.class, properties = "servify.mercadopago.access-token=")
 @AutoConfigureMockMvc
 class MvpHttpFlowTests {
 
@@ -41,6 +41,10 @@ class MvpHttpFlowTests {
     void flujoPrincipalMvp_exponeIdsNecesariosParaReact() throws Exception {
         UUID solicitanteId = crearUsuario("cliente-http@servify.test");
         UUID prestadorId = crearUsuario("prestador-http@servify.test");
+        String solicitanteToken = crearCredencialesYLogin(
+                solicitanteId, "cliente-http@servify.test", "Passw0rd!");
+        String prestadorToken = crearCredencialesYLogin(
+                prestadorId, "prestador-http@servify.test", "Passw0rd!");
 
         mockMvc.perform(putJson("/api/v1/usuarios/" + prestadorId + "/perfil", """
                 {
@@ -147,8 +151,7 @@ class MvpHttpFlowTests {
                     "horaDesde": "10:00:00",
                     "horaHasta": "11:00:00"
                   },
-                  "descripcionNecesidad": "Necesito reparar una perdida",
-                  "precioReferencia": 1500
+                  "descripcionNecesidad": "Necesito reparar una perdida"
                 }
                 """.formatted(solicitanteId, categoriaId)));
 
@@ -179,28 +182,52 @@ class MvpHttpFlowTests {
         JsonNode estadoAsignado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
         assertEquals("ASIGNADA", estadoAsignado.get("estadoSolicitud").asText());
 
-        mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
+        JsonNode asignacionConPrecio = responseJson(mockMvc.perform(putJsonAuth(
+                        "/api/v1/solicitudes/" + solicitudId + "/asignaciones/" + asignacionId + "/precio",
+                        """
+                        {
+                          "solicitanteId": "%s",
+                          "precioAcordado": 1500
+                        }
+                        """.formatted(solicitanteId), solicitanteToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertEquals(1500, asignacionConPrecio.get("precioAcordado").asInt());
+
+        mockMvc.perform(postJsonAuth("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
                 {
                   "asignacionServicioId": "%s",
                   "confirmanteId": "%s",
                   "rolConfirmante": "SOLICITANTE",
                   "observacion": "Finalizado por solicitante"
                 }
-                """.formatted(asignacionId, solicitanteId)))
+                """.formatted(asignacionId, solicitanteId), solicitanteToken))
                 .andExpect(status().isNoContent());
 
         JsonNode estadoUnaConfirmacion = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
         assertTrue(estadoUnaConfirmacion.get("confirmadoPorSolicitante").asBoolean());
         assertTrue(!estadoUnaConfirmacion.get("confirmadoPorPrestador").asBoolean());
 
-        mockMvc.perform(postJson("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
+        mockMvc.perform(postJsonAuth("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
                 {
                   "asignacionServicioId": "%s",
                   "confirmanteId": "%s",
                   "rolConfirmante": "PRESTADOR",
                   "observacion": "Finalizado por prestador"
                 }
-                """.formatted(asignacionId, prestadorId)))
+                """.formatted(asignacionId, prestadorId), solicitanteToken))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(postJsonAuth("/api/v1/solicitudes/" + solicitudId + "/finalizaciones/confirmaciones", """
+                {
+                  "asignacionServicioId": "%s",
+                  "confirmanteId": "%s",
+                  "rolConfirmante": "PRESTADOR",
+                  "observacion": "Finalizado por prestador"
+                }
+                """.formatted(asignacionId, prestadorId), prestadorToken))
                 .andExpect(status().isNoContent());
 
         JsonNode estadoFinalizado = responseJson(getPath("/api/v1/solicitudes/" + solicitudId + "/estado-asignacion"));
@@ -1102,6 +1129,8 @@ class MvpHttpFlowTests {
     @Test
     void solicitantePuedeEditarYCancelarSolicitudActiva() throws Exception {
         UUID solicitanteId = crearUsuario("cliente-edita-solicitud-http@servify.test");
+        String solicitanteToken = crearCredencialesYLogin(
+                solicitanteId, "cliente-edita-solicitud-http@servify.test", "Passw0rd!");
         UUID categoriaId = crearCategoriaActiva("Solicitudes editables HTTP");
 
         UUID solicitudId = idFrom(postCreatedPath("/api/v1/solicitudes", """
@@ -1160,11 +1189,11 @@ class MvpHttpFlowTests {
         assertEquals("TUESDAY", actualizada.get("disponibilidadRequerida").get("diaSemana").asText());
         assertEquals("Necesito una clase inicial editada", actualizada.get("descripcionNecesidad").asText());
 
-        mockMvc.perform(deleteJson("/api/v1/solicitudes/" + solicitudId, """
+        mockMvc.perform(deleteJsonAuth("/api/v1/solicitudes/" + solicitudId, """
                 {
                   "solicitanteId": "%s"
                 }
-                """.formatted(solicitanteId)))
+                """.formatted(solicitanteId), solicitanteToken))
                 .andExpect(status().isNoContent());
 
         JsonNode cancelada = responseJson(getPath("/api/v1/solicitudes/" + solicitudId));
@@ -1423,6 +1452,24 @@ class MvpHttpFlowTests {
         return sesion.get("accessToken").get("token").asText();
     }
 
+    private String crearCredencialesYLogin(UUID usuarioId, String email, String password) throws Exception {
+        mockMvc.perform(postJson("/api/v1/auth/credenciales", """
+                {
+                  "usuarioId": "%s",
+                  "emailAcceso": "%s",
+                  "passwordPlano": "%s"
+                }
+                """.formatted(usuarioId, email, password)))
+                .andExpect(status().isCreated());
+        JsonNode sesion = responseJson(postPath("/api/v1/auth/login", """
+                {
+                  "emailAcceso": "%s",
+                  "passwordPlano": "%s"
+                }
+                """.formatted(email, password)));
+        return sesion.get("accessToken").get("token").asText();
+    }
+
     private void completarPerfilPalermo(UUID usuarioId) throws Exception {
         mockMvc.perform(putJson("/api/v1/usuarios/" + usuarioId + "/perfil", """
                 {
@@ -1613,8 +1660,20 @@ class MvpHttpFlowTests {
         return post(path).contentType(MediaType.APPLICATION_JSON).content(json);
     }
 
+    private org.springframework.test.web.servlet.RequestBuilder postJsonAuth(String path, String json, String accessToken) {
+        return post(path).header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON).content(json);
+    }
+
     private org.springframework.test.web.servlet.RequestBuilder putJson(String path, String json) {
         return org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json);
+    }
+
+    private org.springframework.test.web.servlet.RequestBuilder putJsonAuth(String path, String json, String accessToken) {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(path)
+                .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json);
     }
@@ -1625,5 +1684,10 @@ class MvpHttpFlowTests {
 
     private org.springframework.test.web.servlet.RequestBuilder deleteJson(String path, String json) {
         return delete(path).contentType(MediaType.APPLICATION_JSON).content(json);
+    }
+
+    private org.springframework.test.web.servlet.RequestBuilder deleteJsonAuth(String path, String json, String accessToken) {
+        return delete(path).header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON).content(json);
     }
 }

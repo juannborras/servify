@@ -1,6 +1,10 @@
 package com.servify.solicitudes.infrastructure.persistence;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +22,10 @@ interface DistribucionSolicitudJpaRepository extends JpaRepository<DistribucionS
 interface AsignacionServicioJpaRepository extends JpaRepository<AsignacionServicioJpaEntity, Long> {
     Optional<AsignacionServicioJpaEntity> findBySolicitudId(Long solicitudId);
     List<AsignacionServicioJpaEntity> findByPrestadorId(Long prestadorId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select asignacion from AsignacionServicioJpaEntity asignacion where asignacion.id = :asignacionId")
+    Optional<AsignacionServicioJpaEntity> findByIdForUpdate(@Param("asignacionId") Long asignacionId);
 }
 
 interface CalificacionJpaRepository extends JpaRepository<CalificacionJpaEntity, Long> {
@@ -34,6 +42,27 @@ interface ContraofertaJpaRepository extends JpaRepository<ContraofertaJpaEntity,
 interface ConfirmacionFinalizacionJpaRepository extends JpaRepository<ConfirmacionFinalizacionJpaEntity, UUID> {
     List<ConfirmacionFinalizacionJpaEntity> findBySolicitudId(Long solicitudId);
     List<ConfirmacionFinalizacionJpaEntity> findByAsignacionServicioId(Long asignacionServicioId);
-    Optional<ConfirmacionFinalizacionJpaEntity> findByAsignacionServicioIdAndRolConfirmante(Long asignacionServicioId, String rolConfirmante);
+    Optional<ConfirmacionFinalizacionJpaEntity> findByAsignacionServicioIdAndRolConfirmanteAndEncuentroServicioIdIsNull(
+            Long asignacionServicioId, String rolConfirmante);
+    List<ConfirmacionFinalizacionJpaEntity> findByEncuentroServicioId(UUID encuentroServicioId);
+    Optional<ConfirmacionFinalizacionJpaEntity> findByEncuentroServicioIdAndRolConfirmante(UUID encuentroServicioId, String rolConfirmante);
     List<ConfirmacionFinalizacionJpaEntity> findByConfirmanteId(Long confirmanteId);
+}
+
+interface ServicioEncuentroJpaRepository extends JpaRepository<ServicioEncuentroJpaEntity, UUID> {
+    List<ServicioEncuentroJpaEntity> findBySolicitudId(Long solicitudId);
+    List<ServicioEncuentroJpaEntity> findByAsignacionServicioId(Long asignacionServicioId);
+    List<ServicioEncuentroJpaEntity> findByRecurrenciaServicioId(UUID recurrenciaServicioId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select encuentro from ServicioEncuentroJpaEntity encuentro where encuentro.id = :encuentroId")
+    Optional<ServicioEncuentroJpaEntity> findByIdForUpdate(@Param("encuentroId") UUID encuentroId);
+}
+
+interface ServicioRecurrenciaJpaRepository extends JpaRepository<ServicioRecurrenciaJpaEntity, UUID> {
+    Optional<ServicioRecurrenciaJpaEntity> findBySolicitudId(Long solicitudId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select recurrencia from ServicioRecurrenciaJpaEntity recurrencia where recurrencia.id = :recurrenciaId")
+    Optional<ServicioRecurrenciaJpaEntity> findByIdForUpdate(@Param("recurrenciaId") UUID recurrenciaId);
 }

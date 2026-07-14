@@ -15,7 +15,9 @@ import { SettingsDrawer } from "./components/SettingsDrawer";
 import { BottomNav } from "./components/BottomNav";
 import { RatingModal } from "./components/RatingModal";
 import { NewRequestModal, type NewRequestInitialValues } from "./components/NewRequestModal";
+import { ScreenErrorBoundary } from './components/ScreenErrorBoundary';
 import { servifyApi, type ApiNotification, type ApiPublicProvider, type SessionUser } from "./api";
+import { cleanPaymentReturnUrl, readPaymentReturnFromUrl, storePaymentReturn } from "./paymentReturn";
 
 type AppScreen =
   | "splash"
@@ -51,11 +53,48 @@ export default function App() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [requestsRefreshKey, setRequestsRefreshKey] = useState(0);
+  const [requestDetailBackScreen, setRequestDetailBackScreen] = useState<"requests" | "my-services">("requests");
+  const [paymentReturnContext] = useState(() => readPaymentReturnFromUrl());
 
   const showNav =
     screen !== "splash" && screen !== "auth";
 
-  const handleSplashDone = () => setScreen(user ? "explore" : "auth");
+  const handleSplashDone = () => {
+    if (!user) {
+      setScreen("auth");
+      return;
+    }
+    if (paymentReturnContext?.solicitudId) {
+      setPendingRequestId(paymentReturnContext.solicitudId);
+      setActiveTab("requests");
+      setScreen("requests");
+      return;
+    }
+    setScreen("explore");
+  };
+
+  useEffect(() => {
+    if (!user?.id || !paymentReturnContext) return;
+
+    let cancelled = false;
+    storePaymentReturn(paymentReturnContext);
+    setPendingRequestId(paymentReturnContext.solicitudId);
+
+    void servifyApi
+      .syncServicePayment({
+        pagoId: paymentReturnContext.pagoId,
+        solicitanteId: user.id,
+        mercadoPagoPaymentId: paymentReturnContext.mercadoPagoPaymentId,
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) cleanPaymentReturnUrl();
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentReturnContext, user?.id]);
 
   const loadUnreadNotificationCount = useCallback(async () => {
     if (!user?.id) {
@@ -72,8 +111,14 @@ export default function App() {
 
   const handleAuth = (u: SessionUser) => {
     setUser(u);
-    setScreen("explore");
-    setActiveTab("explore");
+    if (paymentReturnContext?.solicitudId) {
+      setPendingRequestId(paymentReturnContext.solicitudId);
+      setScreen("requests");
+      setActiveTab("requests");
+    } else {
+      setScreen("explore");
+      setActiveTab("explore");
+    }
   };
 
   const handleLogout = () => {
@@ -104,8 +149,9 @@ export default function App() {
     else if (tab === "profile") setScreen("profile");
   };
 
-  const handleRequestPress = (req: ServiceRequest) => {
+  const handleRequestPress = (req: ServiceRequest, backScreen: "requests" | "my-services" = "requests") => {
     setSelectedRequest(req);
+    setRequestDetailBackScreen(backScreen);
     setScreen("request-detail");
   };
 
@@ -218,8 +264,8 @@ export default function App() {
             currentUser={user}
             onProviderPress={(provider) => handleProviderPress(provider, "requests")}
             onBack={() => {
-              setScreen("requests");
-              setActiveTab("requests");
+              setScreen(requestDetailBackScreen);
+              setActiveTab(requestDetailBackScreen);
             }}
             onRate={handleRate}
           />
@@ -261,6 +307,7 @@ export default function App() {
               setScreen("publish");
               setActiveTab("publish");
             }}
+            onOpenRequest={(request) => handleRequestPress(request, "my-services")}
           />
         );
       case "publish":
@@ -307,7 +354,9 @@ export default function App() {
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="flex-1 overflow-hidden flex flex-col"
             >
-              {renderScreen()}
+              <ScreenErrorBoundary resetKey={`${screen}:${selectedRequest?.id ?? ''}`}>
+                {renderScreen()}
+              </ScreenErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </div>

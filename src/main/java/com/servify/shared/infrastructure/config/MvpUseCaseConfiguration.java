@@ -50,6 +50,8 @@ import com.servify.notificaciones.application.service.CrearNotificacionUsuarioSe
 import com.servify.notificaciones.application.service.EliminarNotificacionUsuarioService;
 import com.servify.notificaciones.application.service.ListarNotificacionesUsuarioService;
 import com.servify.notificaciones.application.service.MarcarNotificacionLeidaService;
+import com.servify.pagos.application.port.out.EstadoIntegracionPagoPort;
+import com.servify.pagos.application.port.out.PagoServicioRepositoryPort;
 import com.servify.publicaciones.application.port.in.ActualizarCategoriaServicioUseCase;
 import com.servify.publicaciones.application.port.in.ActualizarPublicacionUseCase;
 import com.servify.publicaciones.application.port.in.BuscarPublicacionesCompatiblesUseCase;
@@ -82,19 +84,26 @@ import com.servify.publicaciones.domain.service.PoliticaRelevanciaServicio;
 import com.servify.publicaciones.domain.service.ValidadorDisponibilidadHoraria;
 import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
 import com.servify.solicitudes.application.port.in.ActualizarSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.in.CancelarEncuentroServicioUseCase;
+import com.servify.solicitudes.application.port.in.CancelarRecurrenciaServicioUseCase;
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.in.AcordarPrecioAsignacionUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarFinalizacionServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConsultarCalificacionServicioUseCase;
 import com.servify.solicitudes.application.port.in.CrearSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.EmitirContraofertaUseCase;
+import com.servify.solicitudes.application.port.in.ListarEncuentrosSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesDelSolicitanteUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesRecibidasDetalladasUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesRecibidasUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerEstadoAsignacionSolicitudUseCase;
+import com.servify.solicitudes.application.port.in.ObtenerRecurrenciaSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.in.ProponerEncuentroServicioUseCase;
 import com.servify.solicitudes.application.port.in.ReintentarDistribucionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ResolverContraofertaUseCase;
+import com.servify.solicitudes.application.port.in.ResolverEncuentroServicioUseCase;
 import com.servify.solicitudes.application.port.in.ResponderDistribucionSolicitudUseCase;
 import com.servify.solicitudes.application.port.out.AsignacionServicioRepositoryPort;
 import com.servify.solicitudes.application.port.out.CalificacionRepositoryPort;
@@ -103,29 +112,39 @@ import com.servify.solicitudes.application.port.out.ConfirmacionFinalizacionRepo
 import com.servify.solicitudes.application.port.out.ContraofertaRepositoryPort;
 import com.servify.solicitudes.application.port.out.DistribucionSolicitudRepositoryPort;
 import com.servify.solicitudes.application.port.out.PublicacionesCompatiblesPort;
+import com.servify.solicitudes.application.port.out.ServicioEncuentroRepositoryPort;
+import com.servify.solicitudes.application.port.out.ServicioRecurrenciaRepositoryPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
 import com.servify.solicitudes.application.service.CalificarServicioService;
 import com.servify.solicitudes.application.service.ActualizarSolicitudServicioService;
+import com.servify.solicitudes.application.service.CancelarEncuentroServicioService;
+import com.servify.solicitudes.application.service.CancelarRecurrenciaServicioService;
 import com.servify.solicitudes.application.service.CancelarSolicitudServicioService;
+import com.servify.solicitudes.application.service.AcordarPrecioAsignacionService;
 import com.servify.solicitudes.application.service.ConfirmarAsignacionSolicitudService;
 import com.servify.solicitudes.application.service.ConfirmarFinalizacionServicioService;
 import com.servify.solicitudes.application.service.ConsultarCalificacionServicioService;
 import com.servify.solicitudes.application.service.CrearSolicitudServicioService;
 import com.servify.solicitudes.application.service.DistribuidorSolicitudService;
 import com.servify.solicitudes.application.service.EmitirContraofertaService;
+import com.servify.solicitudes.application.service.ListarEncuentrosSolicitudService;
 import com.servify.solicitudes.application.service.ListarSolicitudesDelSolicitanteService;
 import com.servify.solicitudes.application.service.ListarSolicitudesRecibidasDetalladasService;
 import com.servify.solicitudes.application.service.ListarSolicitudesRecibidasService;
 import com.servify.solicitudes.application.service.NotificadorEventosSolicitudService;
 import com.servify.solicitudes.application.service.ObtenerEstadoAsignacionSolicitudService;
+import com.servify.solicitudes.application.service.ObtenerRecurrenciaSolicitudService;
 import com.servify.solicitudes.application.service.ObtenerSolicitudServicioService;
+import com.servify.solicitudes.application.service.ProponerEncuentroServicioService;
 import com.servify.solicitudes.application.service.ReintentarDistribucionSolicitudService;
 import com.servify.solicitudes.application.service.ResolverContraofertaService;
+import com.servify.solicitudes.application.service.ResolverEncuentroServicioService;
 import com.servify.solicitudes.application.service.ResponderDistribucionSolicitudService;
 import com.servify.solicitudes.domain.service.MotorDistribucionSolicitudes;
 import com.servify.solicitudes.domain.service.PoliticaAsignacionUnica;
 import com.servify.solicitudes.domain.service.PoliticaCalificacion;
 import com.servify.solicitudes.domain.service.PoliticaFinalizacionMutua;
+import com.servify.solicitudes.domain.service.CalculadorFechasRecurrencia;
 import com.servify.usuarios.application.port.in.ActualizarPerfilUsuarioUseCase;
 import com.servify.usuarios.application.port.in.ActualizarCuentaUsuarioUseCase;
 import com.servify.usuarios.application.port.in.BuscarPrestadoresPublicosUseCase;
@@ -498,11 +517,13 @@ public class MvpUseCaseConfiguration {
     @Bean
     CrearSolicitudServicioUseCase crearSolicitudServicioUseCase(
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
-            DistribuidorSolicitudService distribuidorSolicitudService
+            DistribuidorSolicitudService distribuidorSolicitudService,
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort
     ) {
         return new CrearSolicitudServicioService(
                 solicitudServicioRepositoryPort,
-                distribuidorSolicitudService
+                distribuidorSolicitudService,
+                servicioRecurrenciaRepositoryPort
         );
     }
 
@@ -610,13 +631,107 @@ public class MvpUseCaseConfiguration {
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
             PoliticaAsignacionUnica politicaAsignacionUnica,
-            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService,
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort
     ) {
         return new ConfirmarAsignacionSolicitudService(
                 solicitudServicioRepositoryPort,
                 distribucionSolicitudRepositoryPort,
                 asignacionServicioRepositoryPort,
                 politicaAsignacionUnica,
+                notificadorEventosSolicitudService,
+                servicioEncuentroRepositoryPort,
+                servicioRecurrenciaRepositoryPort
+        );
+    }
+
+    @Bean
+    AcordarPrecioAsignacionUseCase acordarPrecioAsignacionUseCase(
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort
+    ) {
+        return new AcordarPrecioAsignacionService(
+                solicitudServicioRepositoryPort,
+                asignacionServicioRepositoryPort
+        );
+    }
+
+    @Bean
+    ListarEncuentrosSolicitudUseCase listarEncuentrosSolicitudUseCase(
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort
+    ) {
+        return new ListarEncuentrosSolicitudService(servicioEncuentroRepositoryPort);
+    }
+
+    @Bean
+    ProponerEncuentroServicioUseCase proponerEncuentroServicioUseCase(
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
+        return new ProponerEncuentroServicioService(
+                servicioEncuentroRepositoryPort,
+                solicitudServicioRepositoryPort,
+                asignacionServicioRepositoryPort,
+                notificadorEventosSolicitudService
+        );
+    }
+
+    @Bean
+    ResolverEncuentroServicioUseCase resolverEncuentroServicioUseCase(
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
+        return new ResolverEncuentroServicioService(
+                servicioEncuentroRepositoryPort,
+                solicitudServicioRepositoryPort,
+                asignacionServicioRepositoryPort,
+                notificadorEventosSolicitudService
+        );
+    }
+
+    @Bean
+    CancelarEncuentroServicioUseCase cancelarEncuentroServicioUseCase(
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService,
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort
+    ) {
+        return new CancelarEncuentroServicioService(
+                servicioEncuentroRepositoryPort,
+                solicitudServicioRepositoryPort,
+                asignacionServicioRepositoryPort,
+                notificadorEventosSolicitudService,
+                servicioRecurrenciaRepositoryPort,
+                new CalculadorFechasRecurrencia()
+        );
+    }
+
+    @Bean
+    ObtenerRecurrenciaSolicitudUseCase obtenerRecurrenciaSolicitudUseCase(
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort
+    ) {
+        return new ObtenerRecurrenciaSolicitudService(servicioRecurrenciaRepositoryPort);
+    }
+
+    @Bean
+    CancelarRecurrenciaServicioUseCase cancelarRecurrenciaServicioUseCase(
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort,
+            SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+            AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+    ) {
+        return new CancelarRecurrenciaServicioService(
+                servicioRecurrenciaRepositoryPort,
+                solicitudServicioRepositoryPort,
+                asignacionServicioRepositoryPort,
+                servicioEncuentroRepositoryPort,
                 notificadorEventosSolicitudService
         );
     }
@@ -627,14 +742,23 @@ public class MvpUseCaseConfiguration {
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
             SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
             PoliticaFinalizacionMutua politicaFinalizacionMutua,
-            NotificadorEventosSolicitudService notificadorEventosSolicitudService
+            NotificadorEventosSolicitudService notificadorEventosSolicitudService,
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort,
+            PagoServicioRepositoryPort pagoServicioRepositoryPort,
+            EstadoIntegracionPagoPort estadoIntegracionPagoPort
     ) {
         return new ConfirmarFinalizacionServicioService(
                 confirmacionFinalizacionRepositoryPort,
                 asignacionServicioRepositoryPort,
                 solicitudServicioRepositoryPort,
                 politicaFinalizacionMutua,
-                notificadorEventosSolicitudService
+                notificadorEventosSolicitudService,
+                servicioEncuentroRepositoryPort,
+                servicioRecurrenciaRepositoryPort,
+                new CalculadorFechasRecurrencia(),
+                pagoServicioRepositoryPort,
+                estadoIntegracionPagoPort
         );
     }
 
@@ -681,14 +805,18 @@ public class MvpUseCaseConfiguration {
             DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
             AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
             ContraofertaRepositoryPort contraofertaRepositoryPort,
-            ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort
+            ConfirmacionFinalizacionRepositoryPort confirmacionFinalizacionRepositoryPort,
+            ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+            ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort
     ) {
         return new ObtenerEstadoAsignacionSolicitudService(
                 solicitudServicioRepositoryPort,
                 distribucionSolicitudRepositoryPort,
                 asignacionServicioRepositoryPort,
                 contraofertaRepositoryPort,
-                confirmacionFinalizacionRepositoryPort
+                confirmacionFinalizacionRepositoryPort,
+                servicioEncuentroRepositoryPort,
+                servicioRecurrenciaRepositoryPort
         );
     }
 

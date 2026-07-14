@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type React from "react";
-import { ArrowLeft, Clock, DollarSign, MapPin, SearchX, Send, UserRound } from "lucide-react";
+import { ArrowLeft, Clock, DollarSign, MapPin, Send, UserRound } from "lucide-react";
 import {
   WEEK_DAYS,
   formatMoney,
@@ -11,6 +11,7 @@ import {
   type ApiRatingSummary,
 } from "../api";
 import type { NewRequestInitialValues } from "./NewRequestModal";
+import { ServisHint } from "./ServisHint";
 
 interface CategoryPublicationsScreenProps {
   categoryName: string;
@@ -108,17 +109,10 @@ export function CategoryPublicationsScreen({
         ) : null}
 
         {!loading && publications.length === 0 ? (
-          <div className="servify-empty-state flex flex-col items-center justify-center py-20 gap-4 text-center rounded-3xl px-5">
-            <div className="flex items-center justify-center rounded-3xl" style={{ width: 76, height: 76, background: "#eef2ff" }}>
-              <SearchX size={32} color="#64748b" strokeWidth={1.8} />
-            </div>
-            <div>
-              <p style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>Todavia no hay publicaciones</p>
-              <p style={{ fontSize: 13, color: "#64748b", marginTop: 5, lineHeight: 1.45 }}>
-                Cuando haya servicios activos en esta categoria van a aparecer aca.
-              </p>
-            </div>
-          </div>
+          <ServisHint
+            title="Todavia no hay publicaciones"
+            detail="Cuando haya servicios activos en esta categoria los voy a ordenar aca para que puedas compararlos rapido."
+          />
         ) : null}
 
         {publications.map((publication) => {

@@ -23,6 +23,7 @@ import {
   type RoleType,
   type SessionUser,
 } from "../api";
+import { ServisHint } from "./ServisHint";
 
 interface ProfileScreenProps {
   user: SessionUser | null;
@@ -137,18 +138,10 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
   if (!user) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-5 px-8" style={{ background: "#f8fafc" }}>
-        <div
-          className="flex items-center justify-center rounded-3xl"
-          style={{ width: 80, height: 80, background: "#eff6ff" }}
-        >
-          <User size={36} color="#2563eb" strokeWidth={1.6} />
-        </div>
-        <div className="text-center">
-          <p style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>Sin cuenta</p>
-          <p style={{ fontSize: 14, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
-            Inicia sesion para ver tu perfil, gestionar solicitudes y publicar servicios
-          </p>
-        </div>
+        <ServisHint
+          title="Tu perfil empieza aca"
+          detail="Inicia sesion para ver tus solicitudes, publicar servicios y mantener tu actividad ordenada."
+        />
         <button
           onClick={onLogin}
           className="px-8 py-3.5 rounded-2xl transition-all active:scale-95"
@@ -171,6 +164,7 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
   const availabilityDayToLabel = WEEK_DAYS.find((day) => day.value === availabilityDayTo)?.label ?? "Viernes";
   const availabilityLabel = `${availabilityDayFromLabel} a ${availabilityDayToLabel}, ${availabilityFrom} - ${availabilityTo}`;
   const canSave = Boolean(firstName.trim() && lastName.trim() && username.trim() && email.trim() && availabilityDayFrom && availabilityDayTo && availabilityFrom && availabilityTo);
+  const profileNeedsHelp = !canSave || !photoUrl;
 
   const handleProfilePhotoSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -392,6 +386,16 @@ export function ProfileScreen({ user, onLogout, onLogin, onUserUpdated }: Profil
             />
           </div>
 
+          {!editing && profileNeedsHelp ? (
+            <div className="mt-4">
+              <ServisHint
+                compact
+                tone="quiet"
+                title="Completa tu perfil"
+                detail="Una foto, zona y disponibilidad claras ayudan a que otros usuarios confien y a que el matching sea mas preciso."
+              />
+            </div>
+          ) : null}
           {editing ? (
             <div className="mt-4 pt-4" style={{ borderTop: "1px solid #e2e8f0" }}>
               <p style={{ fontSize: 12, fontWeight: 800, color: "#475569", marginBottom: 10 }}>Editar perfil</p>

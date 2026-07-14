@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus,
   MapPin,
@@ -12,6 +12,8 @@ import {
   Save,
   AlignLeft,
   FileText,
+  CalendarDays,
+  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -25,6 +27,9 @@ import {
   type ApiPublication,
 } from "../api";
 import { PullToRefreshIndicator, usePullToRefresh } from "./PullToRefresh";
+import { ServisHint } from "./ServisHint";
+import { ProviderAgenda } from "./ProviderAgenda";
+import type { ServiceRequest } from "./RequestsScreen";
 
 const categories = [
   "Oficios", "Clases particulares", "Soporte tÃ©cnico", "Limpieza",
@@ -62,15 +67,19 @@ interface EditForm {
 interface MyPublicationsProps {
   userId?: string;
   onNew: () => void;
+  onOpenRequest: (request: ServiceRequest) => void;
 }
 
-export function MyPublications({ userId, onNew }: MyPublicationsProps) {
+export function MyPublications({ userId, onNew, onOpenRequest }: MyPublicationsProps) {
   const [pubs, setPubs] = useState<Publication[]>([]);
   const [deletingId, setDeletingId] = useState<number | string | null>(null);
+  const [publicationPendingDeletion, setPublicationPendingDeletion] = useState<Publication | null>(null);
   const [editing, setEditing] = useState<Publication | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState("");
+  const [serviceView, setServiceView] = useState<"agenda" | "publications">("agenda");
+  const cancelDeleteButtonRef = useRef<HTMLButtonElement>(null);
 
   const loadPublications = useCallback(async () => {
     if (!userId) return;
@@ -86,6 +95,18 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
   useEffect(() => {
     void loadPublications();
   }, [loadPublications]);
+
+  useEffect(() => {
+    if (!publicationPendingDeletion) return;
+    cancelDeleteButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && deletingId === null) {
+        setPublicationPendingDeletion(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deletingId, publicationPendingDeletion]);
 
   const { pullDistance, refreshing, pullHandlers } = usePullToRefresh(loadPublications, Boolean(userId));
 
@@ -115,6 +136,7 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
     try {
       await servifyApi.deletePublication(id, userId);
       setPubs((prev) => prev.filter((p) => p.id !== id));
+      setPublicationPendingDeletion(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo eliminar la publicacion");
     } finally {
@@ -180,22 +202,45 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
     <div className="servify-dark-screen relative flex flex-col h-full" style={{ background: "#f8fafc" }}>
       <div className="servify-page-header px-5 pt-12 pb-5 bg-white">
         <div className="flex items-center justify-between mb-1">
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Mis publicaciones</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Mis servicios</h1>
           <button
             onClick={onNew}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all active:scale-95"
             style={{ background: "#0891b2", color: "white", fontWeight: 700, fontSize: 13 }}
           >
             <Plus size={16} strokeWidth={2.5} />
-            Nuevo
+            Publicar
           </button>
         </div>
         <p style={{ fontSize: 13, color: "#64748b", fontWeight: 500 }}>
-          {pubs.length} servicios publicados - {active} activos
+          {serviceView === "agenda" ? "Organiza tus proximos trabajos" : `${pubs.length} servicios publicados - ${active} activos`}
         </p>
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl p-1" style={{ background: "#f1f5f9" }}>
+          <button
+            type="button"
+            onClick={() => setServiceView("agenda")}
+            className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 transition-all active:scale-95"
+            style={{ background: serviceView === "agenda" ? "white" : "transparent", color: serviceView === "agenda" ? "#2563eb" : "#64748b", fontSize: 12, fontWeight: 900, boxShadow: serviceView === "agenda" ? "0 8px 18px rgba(15,23,42,0.08)" : "none" }}
+          >
+            <CalendarDays size={14} strokeWidth={2} />
+            Agenda
+          </button>
+          <button
+            type="button"
+            onClick={() => setServiceView("publications")}
+            className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 transition-all active:scale-95"
+            style={{ background: serviceView === "publications" ? "white" : "transparent", color: serviceView === "publications" ? "#0891b2" : "#64748b", fontSize: 12, fontWeight: 900, boxShadow: serviceView === "publications" ? "0 8px 18px rgba(15,23,42,0.08)" : "none" }}
+          >
+            <FileText size={14} strokeWidth={2} />
+            Publicaciones
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-4" {...pullHandlers}>
+      {serviceView === "agenda" ? (
+        <ProviderAgenda userId={userId} onOpenRequest={onOpenRequest} />
+      ) : (
+        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-4" {...pullHandlers}>
         <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         {error && (
           <p className="rounded-2xl px-4 py-3" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>
@@ -270,7 +315,10 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
                   Editar
                 </button>
                 <button
-                  onClick={() => handleDelete(pub.id)}
+                  onClick={() => {
+                    setError("");
+                    setPublicationPendingDeletion(pub);
+                  }}
                   className="servify-action-button flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all active:scale-95"
                   style={{ background: "#fef2f2", color: "#ef4444", fontWeight: 700, fontSize: 12, border: "1.5px solid #fecaca" }}
                 >
@@ -283,16 +331,11 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
         </AnimatePresence>
 
         {pubs.length === 0 && (
-          <div className="servify-empty-state flex flex-col items-center justify-center py-16 gap-4 rounded-3xl px-5">
-            <div className="flex items-center justify-center rounded-3xl" style={{ width: 72, height: 72, background: "#f1f5f9" }}>
-              <FileText size={30} color="#64748b" strokeWidth={1.6} />
-            </div>
-            <div className="text-center">
-              <p style={{ fontWeight: 700, fontSize: 16, color: "#0f172a" }}>Sin publicaciones</p>
-              <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>
-                Publica tu primer servicio para empezar a recibir pedidos
-              </p>
-            </div>
+          <div className="servify-empty-state flex flex-col justify-center py-16 gap-4 rounded-3xl px-5">
+            <ServisHint
+              title="Publica tu primer servicio"
+              detail="Sumar zona, disponibilidad y precio ayuda a que el motor encuentre solicitudes compatibles."
+            />
             <button
               onClick={onNew}
               className="px-6 py-3 rounded-2xl transition-all active:scale-95"
@@ -302,7 +345,73 @@ export function MyPublications({ userId, onNew }: MyPublicationsProps) {
             </button>
           </div>
         )}
-      </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {publicationPendingDeletion ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-end justify-center px-4 pb-5"
+            style={{ background: "rgba(15, 23, 42, 0.58)", backdropFilter: "blur(3px)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-publication-title"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.98 }}
+              className="servify-card servify-confirm-dialog w-full rounded-3xl p-5"
+              style={{ maxWidth: 420, background: "#ffffff", border: "1px solid #e2e8f0", boxShadow: "0 24px 70px rgba(15, 23, 42, 0.28)" }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex shrink-0 items-center justify-center rounded-2xl" style={{ width: 44, height: 44, background: "#fef2f2" }}>
+                  <AlertTriangle size={22} color="#dc2626" strokeWidth={2.2} />
+                </div>
+                <div className="min-w-0">
+                  <h2 id="delete-publication-title" style={{ color: "#0f172a", fontSize: 18, fontWeight: 900 }}>
+                    ¿Eliminar esta publicación?
+                  </h2>
+                  <p style={{ color: "#64748b", fontSize: 13, lineHeight: 1.55, marginTop: 5 }}>
+                    <strong style={{ color: "#334155" }}>{publicationPendingDeletion.title}</strong> dejará de verse y no podrá volver a activarse.
+                  </p>
+                </div>
+              </div>
+
+              {error ? (
+                <p className="mt-4 rounded-2xl px-3 py-2.5" style={{ background: "#fef2f2", color: "#b91c1c", fontSize: 12, fontWeight: 800 }}>
+                  {error}
+                </p>
+              ) : null}
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  ref={cancelDeleteButtonRef}
+                  type="button"
+                  onClick={() => setPublicationPendingDeletion(null)}
+                  disabled={deletingId !== null}
+                  className="servify-action-button rounded-2xl py-3 transition-all active:scale-95 disabled:opacity-60"
+                  style={{ background: "#f1f5f9", color: "#334155", border: "1px solid #e2e8f0", fontSize: 13, fontWeight: 800 }}
+                >
+                  Conservar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(publicationPendingDeletion.id)}
+                  disabled={deletingId !== null}
+                  className="rounded-2xl py-3 transition-all active:scale-95 disabled:opacity-60"
+                  style={{ background: "#dc2626", color: "#ffffff", fontSize: 13, fontWeight: 900 }}
+                >
+                  {deletingId === publicationPendingDeletion.id ? "Eliminando..." : "Sí, eliminar"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <AnimatePresence>
         {editing && editForm ? (

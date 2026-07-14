@@ -5,12 +5,19 @@ import com.servify.solicitudes.application.dto.ConfirmarAsignacionSolicitudComma
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.out.AsignacionServicioRepositoryPort;
 import com.servify.solicitudes.application.port.out.DistribucionSolicitudRepositoryPort;
+import com.servify.solicitudes.application.port.out.ServicioEncuentroRepositoryPort;
+import com.servify.solicitudes.application.port.out.ServicioRecurrenciaRepositoryPort;
 import com.servify.solicitudes.application.port.out.SolicitudServicioRepositoryPort;
+import com.servify.solicitudes.domain.enumtype.EstadoEncuentroServicio;
 import com.servify.solicitudes.domain.model.AsignacionServicio;
 import com.servify.solicitudes.domain.model.DistribucionSolicitud;
+import com.servify.solicitudes.domain.model.ServicioEncuentro;
+import com.servify.solicitudes.domain.model.ServicioRecurrencia;
 import com.servify.solicitudes.domain.model.SolicitudServicio;
 import com.servify.solicitudes.domain.service.PoliticaAsignacionUnica;
+import com.servify.solicitudes.domain.service.CalculadorFechasRecurrencia;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -21,6 +28,9 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
     private final AsignacionServicioRepositoryPort asignacionServicioRepositoryPort;
     private final PoliticaAsignacionUnica politicaAsignacionUnica;
     private final NotificadorEventosSolicitudService notificadorEventosSolicitudService;
+    private final ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort;
+    private final ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort;
+    private final CalculadorFechasRecurrencia calculadorFechasRecurrencia = new CalculadorFechasRecurrencia();
 
     public ConfirmarAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
                                                DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
@@ -31,6 +41,8 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
                 distribucionSolicitudRepositoryPort,
                 asignacionServicioRepositoryPort,
                 politicaAsignacionUnica,
+                null,
+                null,
                 null
         );
     }
@@ -40,11 +52,31 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
                                                AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
                                                PoliticaAsignacionUnica politicaAsignacionUnica,
                                                NotificadorEventosSolicitudService notificadorEventosSolicitudService) {
+        this(
+                solicitudServicioRepositoryPort,
+                distribucionSolicitudRepositoryPort,
+                asignacionServicioRepositoryPort,
+                politicaAsignacionUnica,
+                notificadorEventosSolicitudService,
+                null,
+                null
+        );
+    }
+
+    public ConfirmarAsignacionSolicitudService(SolicitudServicioRepositoryPort solicitudServicioRepositoryPort,
+                                               DistribucionSolicitudRepositoryPort distribucionSolicitudRepositoryPort,
+                                               AsignacionServicioRepositoryPort asignacionServicioRepositoryPort,
+                                               PoliticaAsignacionUnica politicaAsignacionUnica,
+                                               NotificadorEventosSolicitudService notificadorEventosSolicitudService,
+                                               ServicioEncuentroRepositoryPort servicioEncuentroRepositoryPort,
+                                               ServicioRecurrenciaRepositoryPort servicioRecurrenciaRepositoryPort) {
         this.solicitudServicioRepositoryPort = solicitudServicioRepositoryPort;
         this.distribucionSolicitudRepositoryPort = distribucionSolicitudRepositoryPort;
         this.asignacionServicioRepositoryPort = asignacionServicioRepositoryPort;
         this.politicaAsignacionUnica = politicaAsignacionUnica;
         this.notificadorEventosSolicitudService = notificadorEventosSolicitudService;
+        this.servicioEncuentroRepositoryPort = servicioEncuentroRepositoryPort;
+        this.servicioRecurrenciaRepositoryPort = servicioRecurrenciaRepositoryPort;
     }
 
     @Override
@@ -89,6 +121,7 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
             cerrarDistribucionesRestantes(solicitud.getId(), distribucion.getId());
         }
         notificarAsignacion(solicitud, asignacionGuardada);
+        registrarAgendaInicial(solicitud, asignacionGuardada);
 
         return construirResultado(asignacionGuardada);
     }
@@ -199,5 +232,69 @@ public class ConfirmarAsignacionSolicitudService implements ConfirmarAsignacionS
         if (notificadorEventosSolicitudService != null) {
             notificadorEventosSolicitudService.servicioAsignado(solicitud, asignacion);
         }
+    }
+
+    private void registrarAgendaInicial(SolicitudServicio solicitud, AsignacionServicio asignacion) {
+        if (solicitud == null || asignacion == null || servicioEncuentroRepositoryPort == null) {
+            return;
+        }
+        if (solicitud.esProgramada()
+                && solicitud.getFechaProgramadaInicio() != null
+                && solicitud.getFechaProgramadaFin() != null) {
+            guardarEncuentroConfirmado(
+                    solicitud,
+                    asignacion,
+                    null,
+                    solicitud.getFechaProgramadaInicio(),
+                    solicitud.getFechaProgramadaFin(),
+                    "Fecha programada al crear la solicitud"
+            );
+        }
+        if (solicitud.esRecurrente() && servicioRecurrenciaRepositoryPort != null) {
+            servicioRecurrenciaRepositoryPort.buscarPorSolicitudId(solicitud.getId()).ifPresent(recurrencia -> {
+                recurrencia.activar(asignacion.getId());
+                ServicioRecurrencia guardada = servicioRecurrenciaRepositoryPort.guardar(recurrencia);
+                crearPrimerEncuentroRecurrente(solicitud, asignacion, guardada);
+            });
+        }
+    }
+
+    private void crearPrimerEncuentroRecurrente(SolicitudServicio solicitud,
+                                                AsignacionServicio asignacion,
+                                                ServicioRecurrencia recurrencia) {
+        if (recurrencia.getFechaInicio() == null || recurrencia.getDiaSemana() == null) {
+            return;
+        }
+        LocalDate fecha = calculadorFechasRecurrencia.primeraFecha(recurrencia).orElse(null);
+        if (fecha == null) return;
+        guardarEncuentroConfirmado(
+                solicitud,
+                asignacion,
+                recurrencia.getId(),
+                LocalDateTime.of(fecha, recurrencia.getHoraDesde()),
+                LocalDateTime.of(fecha, recurrencia.getHoraHasta()),
+                "Primer encuentro de servicio recurrente"
+        );
+    }
+
+    private void guardarEncuentroConfirmado(SolicitudServicio solicitud,
+                                            AsignacionServicio asignacion,
+                                            UUID recurrenciaServicioId,
+                                            LocalDateTime fechaInicio,
+                                            LocalDateTime fechaFin,
+                                            String mensaje) {
+        ServicioEncuentro encuentro = new ServicioEncuentro(
+                UUID.randomUUID(),
+                solicitud.getId(),
+                asignacion.getId(),
+                recurrenciaServicioId,
+                solicitud.getSolicitanteId(),
+                fechaInicio,
+                fechaFin,
+                EstadoEncuentroServicio.CONFIRMADO,
+                mensaje,
+                obtenerFechaActual()
+        );
+        servicioEncuentroRepositoryPort.guardar(encuentro);
     }
 }

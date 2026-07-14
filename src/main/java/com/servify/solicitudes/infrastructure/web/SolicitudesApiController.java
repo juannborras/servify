@@ -1,13 +1,18 @@
 package com.servify.solicitudes.infrastructure.web;
 
+import com.servify.administracion.infrastructure.web.AdminAuthorizationService;
+import com.servify.shared.domain.exception.ForbiddenException;
 import com.servify.shared.domain.enumtype.ModalidadServicio;
 import com.servify.shared.domain.valueobject.DisponibilidadHoraria;
 import com.servify.shared.domain.valueobject.Ubicacion;
 import com.servify.shared.infrastructure.web.MvpWebMapper;
+import com.servify.solicitudes.application.dto.AcordarPrecioAsignacionCommand;
 import com.servify.solicitudes.application.dto.ActualizarSolicitudServicioCommand;
 import com.servify.solicitudes.application.dto.AsignacionServicioResult;
 import com.servify.solicitudes.application.dto.CalificarServicioCommand;
 import com.servify.solicitudes.application.dto.CalificacionServicioResult;
+import com.servify.solicitudes.application.dto.CancelarEncuentroServicioCommand;
+import com.servify.solicitudes.application.dto.CancelarRecurrenciaServicioCommand;
 import com.servify.solicitudes.application.dto.CancelarSolicitudServicioCommand;
 import com.servify.solicitudes.application.dto.ConfirmarAsignacionSolicitudCommand;
 import com.servify.solicitudes.application.dto.ConfirmarFinalizacionServicioCommand;
@@ -16,30 +21,46 @@ import com.servify.solicitudes.application.dto.CrearSolicitudServicioCommand;
 import com.servify.solicitudes.application.dto.DistribucionSolicitudResult;
 import com.servify.solicitudes.application.dto.EmitirContraofertaCommand;
 import com.servify.solicitudes.application.dto.EstadoAsignacionSolicitudResult;
+import com.servify.solicitudes.application.dto.ProponerEncuentroServicioCommand;
 import com.servify.solicitudes.application.dto.ResolverContraofertaCommand;
+import com.servify.solicitudes.application.dto.ResolverEncuentroServicioCommand;
 import com.servify.solicitudes.application.dto.ResponderDistribucionSolicitudCommand;
+import com.servify.solicitudes.application.dto.ServicioEncuentroResult;
+import com.servify.solicitudes.application.dto.ServicioRecurrenciaResult;
 import com.servify.solicitudes.application.dto.SolicitudRecibidaResult;
 import com.servify.solicitudes.application.dto.SolicitudServicioResult;
 import com.servify.solicitudes.application.dto.TipoDecisionSolicitud;
 import com.servify.solicitudes.application.dto.TipoRespuestaDistribucion;
+import com.servify.solicitudes.application.port.in.AcordarPrecioAsignacionUseCase;
 import com.servify.solicitudes.application.port.in.ActualizarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.CalificarServicioUseCase;
+import com.servify.solicitudes.application.port.in.CancelarEncuentroServicioUseCase;
+import com.servify.solicitudes.application.port.in.CancelarRecurrenciaServicioUseCase;
 import com.servify.solicitudes.application.port.in.CancelarSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarAsignacionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ConfirmarFinalizacionServicioUseCase;
 import com.servify.solicitudes.application.port.in.ConsultarCalificacionServicioUseCase;
 import com.servify.solicitudes.application.port.in.CrearSolicitudServicioUseCase;
 import com.servify.solicitudes.application.port.in.EmitirContraofertaUseCase;
+import com.servify.solicitudes.application.port.in.ListarEncuentrosSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesDelSolicitanteUseCase;
 import com.servify.solicitudes.application.port.in.ListarSolicitudesRecibidasDetalladasUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerEstadoAsignacionSolicitudUseCase;
+import com.servify.solicitudes.application.port.in.ObtenerRecurrenciaSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ObtenerSolicitudServicioUseCase;
+import com.servify.solicitudes.application.port.in.ProponerEncuentroServicioUseCase;
 import com.servify.solicitudes.application.port.in.ReintentarDistribucionSolicitudUseCase;
 import com.servify.solicitudes.application.port.in.ResolverContraofertaUseCase;
+import com.servify.solicitudes.application.port.in.ResolverEncuentroServicioUseCase;
 import com.servify.solicitudes.application.port.in.ResponderDistribucionSolicitudUseCase;
+import com.servify.solicitudes.domain.enumtype.FrecuenciaRecurrencia;
 import com.servify.solicitudes.domain.enumtype.RolConfirmante;
+import com.servify.solicitudes.domain.enumtype.TipoProgramacionSolicitud;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -66,12 +87,20 @@ public class SolicitudesApiController {
     private final EmitirContraofertaUseCase emitirContraofertaUseCase;
     private final ResolverContraofertaUseCase resolverContraofertaUseCase;
     private final ConfirmarAsignacionSolicitudUseCase confirmarAsignacionSolicitudUseCase;
+    private final AcordarPrecioAsignacionUseCase acordarPrecioAsignacionUseCase;
     private final ConfirmarFinalizacionServicioUseCase confirmarFinalizacionServicioUseCase;
     private final CalificarServicioUseCase calificarServicioUseCase;
     private final ConsultarCalificacionServicioUseCase consultarCalificacionServicioUseCase;
     private final CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase;
     private final ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase;
     private final ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase;
+    private final ListarEncuentrosSolicitudUseCase listarEncuentrosSolicitudUseCase;
+    private final ProponerEncuentroServicioUseCase proponerEncuentroServicioUseCase;
+    private final ResolverEncuentroServicioUseCase resolverEncuentroServicioUseCase;
+    private final CancelarEncuentroServicioUseCase cancelarEncuentroServicioUseCase;
+    private final ObtenerRecurrenciaSolicitudUseCase obtenerRecurrenciaSolicitudUseCase;
+    private final CancelarRecurrenciaServicioUseCase cancelarRecurrenciaServicioUseCase;
+    private final AdminAuthorizationService authorizationService;
 
     public SolicitudesApiController(
             CrearSolicitudServicioUseCase crearSolicitudServicioUseCase,
@@ -83,12 +112,20 @@ public class SolicitudesApiController {
             EmitirContraofertaUseCase emitirContraofertaUseCase,
             ResolverContraofertaUseCase resolverContraofertaUseCase,
             ConfirmarAsignacionSolicitudUseCase confirmarAsignacionSolicitudUseCase,
+            AcordarPrecioAsignacionUseCase acordarPrecioAsignacionUseCase,
             ConfirmarFinalizacionServicioUseCase confirmarFinalizacionServicioUseCase,
             CalificarServicioUseCase calificarServicioUseCase,
             ConsultarCalificacionServicioUseCase consultarCalificacionServicioUseCase,
             CancelarSolicitudServicioUseCase cancelarSolicitudServicioUseCase,
             ObtenerEstadoAsignacionSolicitudUseCase obtenerEstadoAsignacionSolicitudUseCase,
-            ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase
+            ReintentarDistribucionSolicitudUseCase reintentarDistribucionSolicitudUseCase,
+            ListarEncuentrosSolicitudUseCase listarEncuentrosSolicitudUseCase,
+            ProponerEncuentroServicioUseCase proponerEncuentroServicioUseCase,
+            ResolverEncuentroServicioUseCase resolverEncuentroServicioUseCase,
+            CancelarEncuentroServicioUseCase cancelarEncuentroServicioUseCase,
+            ObtenerRecurrenciaSolicitudUseCase obtenerRecurrenciaSolicitudUseCase,
+            CancelarRecurrenciaServicioUseCase cancelarRecurrenciaServicioUseCase,
+            AdminAuthorizationService authorizationService
     ) {
         this.crearSolicitudServicioUseCase = crearSolicitudServicioUseCase;
         this.actualizarSolicitudServicioUseCase = actualizarSolicitudServicioUseCase;
@@ -99,12 +136,20 @@ public class SolicitudesApiController {
         this.emitirContraofertaUseCase = emitirContraofertaUseCase;
         this.resolverContraofertaUseCase = resolverContraofertaUseCase;
         this.confirmarAsignacionSolicitudUseCase = confirmarAsignacionSolicitudUseCase;
+        this.acordarPrecioAsignacionUseCase = acordarPrecioAsignacionUseCase;
         this.confirmarFinalizacionServicioUseCase = confirmarFinalizacionServicioUseCase;
         this.calificarServicioUseCase = calificarServicioUseCase;
         this.consultarCalificacionServicioUseCase = consultarCalificacionServicioUseCase;
         this.cancelarSolicitudServicioUseCase = cancelarSolicitudServicioUseCase;
         this.obtenerEstadoAsignacionSolicitudUseCase = obtenerEstadoAsignacionSolicitudUseCase;
         this.reintentarDistribucionSolicitudUseCase = reintentarDistribucionSolicitudUseCase;
+        this.listarEncuentrosSolicitudUseCase = listarEncuentrosSolicitudUseCase;
+        this.proponerEncuentroServicioUseCase = proponerEncuentroServicioUseCase;
+        this.resolverEncuentroServicioUseCase = resolverEncuentroServicioUseCase;
+        this.cancelarEncuentroServicioUseCase = cancelarEncuentroServicioUseCase;
+        this.obtenerRecurrenciaSolicitudUseCase = obtenerRecurrenciaSolicitudUseCase;
+        this.cancelarRecurrenciaServicioUseCase = cancelarRecurrenciaServicioUseCase;
+        this.authorizationService = authorizationService;
     }
 
     @PostMapping("/solicitudes")
@@ -119,7 +164,13 @@ public class SolicitudesApiController {
                         ubicacion,
                         disponibilidad,
                         request.descripcionNecesidad,
-                        request.precioReferencia
+                        request.precioReferencia,
+                        request.tipoProgramacion,
+                        request.fechaProgramadaInicio,
+                        request.fechaProgramadaFin,
+                        request.frecuenciaRecurrencia,
+                        request.fechaInicioRecurrencia,
+                        request.fechaFinRecurrencia
                 )
         );
         return ResponseEntity
@@ -149,7 +200,10 @@ public class SolicitudesApiController {
                         ubicacion,
                         disponibilidad,
                         request.descripcionNecesidad,
-                        request.precioReferencia
+                        request.precioReferencia,
+                        request.tipoProgramacion,
+                        request.fechaProgramadaInicio,
+                        request.fechaProgramadaFin
                 )
         );
         return ResponseEntity.ok(result);
@@ -240,15 +294,109 @@ public class SolicitudesApiController {
         return ResponseEntity.ok(reintentarDistribucionSolicitudUseCase.reintentar(solicitudId));
     }
 
+    @GetMapping("/solicitudes/{solicitudId}/encuentros")
+    public ResponseEntity<List<ServicioEncuentroResult>> listarEncuentros(@PathVariable UUID solicitudId) {
+        return ResponseEntity.ok(listarEncuentrosSolicitudUseCase.listarPorSolicitudId(solicitudId));
+    }
+
+    @PostMapping("/solicitudes/{solicitudId}/encuentros")
+    public ResponseEntity<ServicioEncuentroResult> proponerEncuentro(
+            @PathVariable UUID solicitudId,
+            @RequestBody ProponerEncuentroRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        exigirActorAutenticado(httpRequest, request.propuestoPorId, "propone el encuentro");
+        ServicioEncuentroResult result = proponerEncuentroServicioUseCase.proponer(
+                new ProponerEncuentroServicioCommand(
+                        solicitudId,
+                        request.asignacionServicioId,
+                        request.propuestoPorId,
+                        request.fechaInicio,
+                        request.fechaFin,
+                        request.mensaje
+                )
+        );
+        return ResponseEntity.created(URI.create("/api/v1/encuentros/" + result.getId())).body(result);
+    }
+
+    @PostMapping("/encuentros/{encuentroId}/resoluciones")
+    public ResponseEntity<ServicioEncuentroResult> resolverEncuentro(
+            @PathVariable UUID encuentroId,
+            @RequestBody ResolverEncuentroRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        exigirActorAutenticado(httpRequest, request.usuarioId, "resuelve el encuentro");
+        ServicioEncuentroResult result = resolverEncuentroServicioUseCase.resolver(
+                new ResolverEncuentroServicioCommand(
+                        encuentroId,
+                        request.usuarioId,
+                        request.decision
+                )
+        );
+        return ResponseEntity.ok(result);
+    }
+
+    @PutMapping("/solicitudes/{solicitudId}/asignaciones/{asignacionServicioId}/precio")
+    public ResponseEntity<AsignacionServicioResult> acordarPrecioAsignacion(
+            @PathVariable UUID solicitudId,
+            @PathVariable UUID asignacionServicioId,
+            @RequestBody AcordarPrecioAsignacionRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        exigirActorAutenticado(httpRequest, request.solicitanteId, "acuerda el precio");
+        return ResponseEntity.ok(acordarPrecioAsignacionUseCase.acordar(
+                new AcordarPrecioAsignacionCommand(
+                        solicitudId,
+                        asignacionServicioId,
+                        request.solicitanteId,
+                        request.precioAcordado
+                )
+        ));
+    }
+
+    @DeleteMapping("/encuentros/{encuentroId}")
+    public ResponseEntity<ServicioEncuentroResult> cancelarEncuentro(
+            @PathVariable UUID encuentroId,
+            @RequestBody CancelarEncuentroRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        exigirActorAutenticado(httpRequest, request.usuarioId, "cancela el encuentro");
+        return ResponseEntity.ok(cancelarEncuentroServicioUseCase.cancelar(
+                new CancelarEncuentroServicioCommand(encuentroId, request.usuarioId)
+        ));
+    }
+
+    @GetMapping("/solicitudes/{solicitudId}/recurrencia")
+    public ResponseEntity<ServicioRecurrenciaResult> obtenerRecurrencia(@PathVariable UUID solicitudId) {
+        return obtenerRecurrenciaSolicitudUseCase.obtenerPorSolicitudId(solicitudId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @DeleteMapping("/solicitudes/{solicitudId}/recurrencia")
+    public ResponseEntity<ServicioRecurrenciaResult> cancelarRecurrencia(
+            @PathVariable UUID solicitudId,
+            @RequestBody CancelarRecurrenciaRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        exigirActorAutenticado(httpRequest, request.usuarioId, "cancela la recurrencia");
+        return ResponseEntity.ok(cancelarRecurrenciaServicioUseCase.cancelar(
+                new CancelarRecurrenciaServicioCommand(solicitudId, request.usuarioId, request.motivo)
+        ));
+    }
+
     @PostMapping("/solicitudes/{solicitudId}/finalizaciones/confirmaciones")
     public ResponseEntity<Void> confirmarFinalizacion(
             @PathVariable UUID solicitudId,
-            @RequestBody ConfirmarFinalizacionRequest request
+            @RequestBody ConfirmarFinalizacionRequest request,
+            HttpServletRequest httpRequest
     ) {
+        exigirActorAutenticado(httpRequest, request.confirmanteId, "confirma el servicio");
         confirmarFinalizacionServicioUseCase.confirmar(
                 new ConfirmarFinalizacionServicioCommand(
                         solicitudId,
                         request.asignacionServicioId,
+                        request.encuentroId,
                         request.confirmanteId,
                         request.rolConfirmante,
                         request.observacion
@@ -292,12 +440,21 @@ public class SolicitudesApiController {
     @DeleteMapping("/solicitudes/{solicitudId}")
     public ResponseEntity<Void> cancelarSolicitud(
             @PathVariable UUID solicitudId,
-            @RequestBody CancelarSolicitudRequest request
+            @RequestBody CancelarSolicitudRequest request,
+            HttpServletRequest httpRequest
     ) {
+        exigirActorAutenticado(httpRequest, request.solicitanteId, "cancela la solicitud");
         cancelarSolicitudServicioUseCase.cancelar(
                 new CancelarSolicitudServicioCommand(solicitudId, request.solicitanteId)
         );
         return ResponseEntity.noContent().build();
+    }
+
+    private void exigirActorAutenticado(HttpServletRequest httpRequest, UUID actorDeclarado, String accion) {
+        UUID autenticadoId = authorizationService.requireActiveUser(httpRequest).getId();
+        if (actorDeclarado == null || !autenticadoId.equals(actorDeclarado)) {
+            throw new ForbiddenException("La identidad autenticada no coincide con quien " + accion);
+        }
     }
 
     public static class CrearSolicitudRequest {
@@ -308,6 +465,12 @@ public class SolicitudesApiController {
         public MvpWebMapper.DisponibilidadPayload disponibilidadRequerida;
         public String descripcionNecesidad;
         public BigDecimal precioReferencia;
+        public TipoProgramacionSolicitud tipoProgramacion;
+        public LocalDateTime fechaProgramadaInicio;
+        public LocalDateTime fechaProgramadaFin;
+        public FrecuenciaRecurrencia frecuenciaRecurrencia;
+        public LocalDate fechaInicioRecurrencia;
+        public LocalDate fechaFinRecurrencia;
     }
 
     public static class ActualizarSolicitudRequest {
@@ -317,6 +480,9 @@ public class SolicitudesApiController {
         public MvpWebMapper.DisponibilidadPayload disponibilidadRequerida;
         public String descripcionNecesidad;
         public BigDecimal precioReferencia;
+        public TipoProgramacionSolicitud tipoProgramacion;
+        public LocalDateTime fechaProgramadaInicio;
+        public LocalDateTime fechaProgramadaFin;
     }
 
     public static class ResponderDistribucionRequest {
@@ -340,8 +506,14 @@ public class SolicitudesApiController {
         public UUID solicitanteId;
     }
 
+    public static class AcordarPrecioAsignacionRequest {
+        public UUID solicitanteId;
+        public BigDecimal precioAcordado;
+    }
+
     public static class ConfirmarFinalizacionRequest {
         public UUID asignacionServicioId;
+        public UUID encuentroId;
         public UUID confirmanteId;
         public RolConfirmante rolConfirmante;
         public String observacion;
@@ -359,5 +531,27 @@ public class SolicitudesApiController {
 
     public static class CancelarSolicitudRequest {
         public UUID solicitanteId;
+    }
+
+    public static class ProponerEncuentroRequest {
+        public UUID asignacionServicioId;
+        public UUID propuestoPorId;
+        public LocalDateTime fechaInicio;
+        public LocalDateTime fechaFin;
+        public String mensaje;
+    }
+
+    public static class ResolverEncuentroRequest {
+        public UUID usuarioId;
+        public TipoDecisionSolicitud decision;
+    }
+
+    public static class CancelarEncuentroRequest {
+        public UUID usuarioId;
+    }
+
+    public static class CancelarRecurrenciaRequest {
+        public UUID usuarioId;
+        public String motivo;
     }
 }

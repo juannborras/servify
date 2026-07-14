@@ -1,0 +1,496 @@
+.servify-payment {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1.5px solid #b9e6f5;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(0, 177, 234, 0.13), transparent 38%),
+    linear-gradient(145deg, #f8fdff 0%, #ffffff 68%);
+  box-shadow: 0 12px 26px rgba(8, 145, 178, 0.08);
+}
+
+.servify-payment__header {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.servify-payment__brand {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 14px;
+  color: #0369a1;
+  background: linear-gradient(145deg, #dff6ff, #bae6fd);
+  border: 1px solid #7dd3fc;
+}
+
+.servify-payment__heading {
+  min-width: 0;
+}
+
+.servify-payment__heading p {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.servify-payment__heading span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.servify-payment__amount {
+  color: #0f766e;
+  font-size: 14px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.servify-payment__status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.servify-payment__status strong {
+  display: block;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.servify-payment__status p {
+  margin-top: 3px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.servify-payment__status--pending {
+  color: #b45309;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.servify-payment__status--approved {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.servify-payment__status--rejected,
+.servify-payment__status--cancelled,
+.servify-payment__status--error {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.servify-payment__loading,
+.servify-payment__message {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.servify-payment__message {
+  padding: 9px 10px;
+  border-radius: 12px;
+  color: #075985;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+}
+
+.servify-payment__message--error {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.servify-payment__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.servify-payment__primary,
+.servify-payment__secondary,
+.servify-payment__verify {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.servify-payment__primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #00a9df 0%, #008fbd 100%);
+  border: 1px solid #0284c7;
+  box-shadow: 0 10px 20px rgba(0, 169, 223, 0.22);
+}
+
+.servify-payment__secondary,
+.servify-payment__verify {
+  color: #0369a1;
+  background: #ffffff;
+  border: 1.5px solid #7dd3fc;
+}
+
+.servify-payment__verify {
+  color: #0f766e;
+  background: #f0fdfa;
+  border-color: #99f6e4;
+}
+
+.servify-payment__primary:not(:disabled):active,
+.servify-payment__secondary:active,
+.servify-payment__verify:not(:disabled):active {
+  transform: scale(0.985);
+}
+
+.servify-payment__primary:focus-visible,
+.servify-payment__secondary:focus-visible,
+.servify-payment__verify:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.28);
+  outline-offset: 2px;
+}
+
+.servify-payment__primary:disabled,
+.servify-payment__verify:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.servify-payment__security {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  padding-top: 2px;
+  color: #64748b;
+}
+
+.servify-payment__security p {
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.servify-payment-waiting {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.servify-price-agreement {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1.5px solid #bae6fd;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f0f9ff, #ffffff);
+}
+
+.servify-price-agreement__intro {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.servify-price-agreement__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 12px;
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.servify-price-agreement__intro strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.servify-price-agreement__intro p,
+.servify-price-agreement__form > p {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.servify-price-agreement__actions,
+.servify-price-agreement__form-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.servify-price-agreement__primary,
+.servify-price-agreement__secondary {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 11px;
+  border-radius: 13px;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.servify-price-agreement__primary {
+  color: #ffffff;
+  border: 1px solid #0284c7;
+  background: linear-gradient(135deg, #00a9df, #008fbd);
+}
+
+.servify-price-agreement__secondary {
+  color: #0369a1;
+  border: 1.5px solid #7dd3fc;
+  background: #ffffff;
+}
+
+.servify-price-agreement__primary:disabled,
+.servify-price-agreement__secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.servify-price-agreement__primary:not(:disabled):active,
+.servify-price-agreement__secondary:not(:disabled):active {
+  transform: scale(0.985);
+}
+
+.servify-price-agreement__primary:focus-visible,
+.servify-price-agreement__secondary:focus-visible,
+.servify-price-agreement__field:focus-within {
+  outline: 3px solid rgba(14, 165, 233, 0.24);
+  outline-offset: 2px;
+}
+
+.servify-price-agreement__form {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.servify-price-agreement__form label {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.servify-price-agreement__field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1.5px solid #bae6fd;
+  border-radius: 13px;
+  color: #0369a1;
+  background: #ffffff;
+}
+
+.servify-price-agreement__field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #0f172a;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.servify-price-agreement__field small {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.servify-payment__spinner {
+  flex: 0 0 auto;
+  animation: servify-payment-spin 800ms linear infinite;
+}
+
+@keyframes servify-payment-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dark .servify-payment {
+  color-scheme: dark;
+  border-color: rgba(56, 189, 248, 0.25);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 145, 178, 0.2), transparent 40%),
+    linear-gradient(145deg, rgba(8, 47, 73, 0.66), rgba(2, 6, 23, 0.72));
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+}
+
+.dark .servify-payment__brand {
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.28);
+  background: rgba(8, 47, 73, 0.78);
+}
+
+.dark .servify-payment__heading p,
+.dark .servify-payment__status strong {
+  color: #f8fafc;
+}
+
+.dark .servify-payment__heading span,
+.dark .servify-payment__loading,
+.dark .servify-payment__security {
+  color: #94a3b8;
+}
+
+.dark .servify-payment__amount {
+  color: #5eead4;
+}
+
+.dark .servify-payment__status {
+  border-color: rgba(96, 165, 250, 0.22);
+  background: rgba(30, 64, 175, 0.18);
+}
+
+.dark .servify-payment__status p {
+  color: #cbd5e1;
+}
+
+.dark .servify-payment__status--pending {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(120, 53, 15, 0.3);
+}
+
+.dark .servify-payment__status--approved {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.22);
+  background: rgba(20, 83, 45, 0.36);
+}
+
+.dark .servify-payment__status--rejected,
+.dark .servify-payment__status--cancelled,
+.dark .servify-payment__status--error,
+.dark .servify-payment__message--error {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.22);
+  background: rgba(127, 29, 29, 0.3);
+}
+
+.dark .servify-payment__message {
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.22);
+  background: rgba(8, 47, 73, 0.45);
+}
+
+.dark .servify-payment__secondary,
+.dark .servify-payment__verify {
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.3);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.dark .servify-price-agreement {
+  border-color: rgba(56, 189, 248, 0.24);
+  background: linear-gradient(145deg, rgba(8, 47, 73, 0.58), rgba(2, 6, 23, 0.68));
+}
+
+.dark .servify-price-agreement__icon {
+  color: #7dd3fc;
+  background: rgba(8, 47, 73, 0.86);
+}
+
+.dark .servify-price-agreement__intro strong,
+.dark .servify-price-agreement__field input {
+  color: #f8fafc;
+}
+
+.dark .servify-price-agreement__intro p,
+.dark .servify-price-agreement__form > p,
+.dark .servify-price-agreement__form label,
+.dark .servify-price-agreement__field small {
+  color: #cbd5e1;
+}
+
+.dark .servify-price-agreement__secondary,
+.dark .servify-price-agreement__field {
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.3);
+  background: rgba(15, 23, 42, 0.74);
+}
+
+.dark .servify-payment-waiting {
+  color: #cbd5e1;
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.dark .servify-payment__verify {
+  color: #5eead4;
+  border-color: rgba(94, 234, 212, 0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .servify-payment__primary,
+  .servify-payment__secondary,
+  .servify-payment__verify {
+    transition: none;
+  }
+
+  .servify-payment__spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .servify-price-agreement__actions,
+  .servify-price-agreement__form-actions {
+    grid-template-columns: 1fr;
+  }
+}
